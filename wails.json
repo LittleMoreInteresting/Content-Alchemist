@@ -1,0 +1,30 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Content-Alchemist",
+  "outputfilename": "Content-Alchemist",
+  "frontend": {
+    "dir": "./frontend",
+    "install": "npm install",
+    "build": "npm run build",
+    "dev": "npm run dev",
+    "package": "npm run build"
+  },
+  "bindings": {
+    "output": "frontend/src/generated/bindings",
+    "tsimports": true
+  },
+  "author": {
+    "name": "Content Alchemist Team",
+    "email": "team@content-alchemist.app"
+  },
+  "info": {
+    "company": "Content Alchemist",
+    "productName": "Content Alchemist",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright © 2024",
+    "comments": "本地优先的技术写作编辑器"
+  },
+  "nsisType": "multiple",
+  "obfuscated": false,
+  "garbleargs": ""
+}
