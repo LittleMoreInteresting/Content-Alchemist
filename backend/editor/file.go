@@ -227,7 +227,8 @@ func (fm *FileManager) CountWords(content string) int {
 	}
 
 	// 移除中文后计算英文词数
-	nonChinese := regexp.MustCompile(`[\u4e00-\u9fff]`).ReplaceAllString(content, "")
+	// Go regexp 不支持 \u 转义，使用原始 Unicode 字符范围
+	nonChinese := regexp.MustCompile(`[一-龥]`).ReplaceAllString(content, "")
 	words := strings.Fields(nonChinese)
 	englishWords = len(words)
 

@@ -36,7 +36,7 @@ func (a *App) Startup(ctx context.Context) {
 	// 获取配置目录
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		fmt.Printf("无法获取配置目录: %w", err)
+		fmt.Printf("无法获取配置目录: %v\n", err)
 	}
 
 	a.configDir = filepath.Join(configDir, "ContentAlchemist")
@@ -44,7 +44,7 @@ func (a *App) Startup(ctx context.Context) {
 	// 初始化数据库
 	database, err := db.New(a.configDir)
 	if err != nil {
-		fmt.Printf("无法初始化数据库: %w", err)
+		fmt.Printf("无法初始化数据库: %v\n", err)
 	}
 	a.db = database
 }
