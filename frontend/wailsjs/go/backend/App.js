@@ -46,6 +46,10 @@ export function ReadArticle(arg1) {
   return window['go']['backend']['App']['ReadArticle'](arg1);
 }
 
+export function RenameArticleByTitle(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['RenameArticleByTitle'](arg1, arg2, arg3);
+}
+
 export function SaveArticle(arg1, arg2) {
   return window['go']['backend']['App']['SaveArticle'](arg1, arg2);
 }

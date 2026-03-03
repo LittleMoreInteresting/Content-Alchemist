@@ -28,6 +28,18 @@
 
       <!-- 编辑器和预览区域 -->
       <div class="editor-container">
+        <!-- 标题编辑区 -->
+        <div v-if="editor.article.value" class="title-editor">
+          <input
+            type="text"
+            v-model="editableTitle"
+            @blur="handleTitleBlur"
+            @keydown.enter="handleTitleEnter"
+            placeholder="输入文章标题..."
+            class="title-input"
+          />
+        </div>
+
         <div class="editor-layout" :class="{ 'preview-only': previewOnly }">
           <!-- 编辑区域 -->
           <div class="editor-pane" v-show="!previewOnly">
@@ -49,6 +61,7 @@
             </div>
             <div class="editor-content">
               <textarea
+                ref="editorRef"
                 :value="editor.content.value"
                 @input="e => editor.setContent((e.target as HTMLTextAreaElement).value)"
                 @scroll="handleEditorScroll"
@@ -169,6 +182,15 @@ const showAIMenu = ref(false);
 const selectedText = ref('');
 const aiMenuPosition = ref({ x: 0, y: 0 });
 const previewRef = ref<HTMLElement | null>(null);
+const editorRef = ref<HTMLTextAreaElement | null>(null);
+const editableTitle = ref('');
+
+/**
+ * 聚焦到编辑器
+ */
+const focusEditor = (): void => {
+  editorRef.value?.focus();
+};
 
 // ============================================
 // 滚动同步
@@ -195,12 +217,16 @@ const handleNew = async () => {
   const success = await editor.createNew();
   if (success) {
     recentArticlesRef.value?.refresh();
+    // 同步标题到编辑框
+    editableTitle.value = editor.article.value?.title || '';
   }
 };
 
 const handleOpen = async (filePath: string) => {
   try {
     await editor.loadArticle(filePath);
+    // 同步标题到编辑框
+    editableTitle.value = editor.article.value?.title || '';
   } catch (err) {
     handleError(err instanceof Error ? err.message : '打开文件失败');
   }
@@ -227,6 +253,60 @@ const handleSaveAs = async () => {
   if (newArticle) {
     recentArticlesRef.value?.refresh();
   }
+};
+
+// ============================================
+// 标题编辑
+// ============================================
+
+/**
+ * 同步标题到文章
+ */
+const syncTitleToArticle = async (): Promise<void> => {
+  if (!editor.article.value || editableTitle.value === editor.article.value.title) {
+    return;
+  }
+
+  try {
+    const newPath = await wails.renameArticleByTitle(
+      editor.article.value.uuid,
+      editableTitle.value,
+      editor.content.value
+    );
+
+    if (newPath) {
+      // 更新本地文章路径
+      editor.article.value.filePath = newPath;
+      editor.article.value.title = editableTitle.value;
+    }
+  } catch (err) {
+    console.error('更新标题失败:', err);
+    handleError(err instanceof Error ? err.message : '更新标题失败');
+    // 重新加载文章以获取正确的状态
+    if (editor.article.value) {
+      try {
+        await editor.loadArticle(editor.article.value.filePath);
+        editableTitle.value = editor.article.value?.title || '';
+      } catch (reloadErr) {
+        console.error('重新加载文章失败:', reloadErr);
+      }
+    }
+  }
+};
+
+/**
+ * 处理标题失焦
+ */
+const handleTitleBlur = (): void => {
+  syncTitleToArticle();
+};
+
+/**
+ * 处理标题回车
+ */
+const handleTitleEnter = (): void => {
+  syncTitleToArticle();
+  focusEditor();
 };
 
 // ============================================
@@ -419,6 +499,35 @@ onUnmounted(() => {
 .markdown-body {
   max-width: 800px;
   margin: 0 auto;
+}
+
+/* 标题编辑区 */
+.title-editor {
+  padding: 12px 20px 8px;
+  background: var(--bg-component);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.title-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-component);
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.title-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+}
+
+.title-input::placeholder {
+  color: var(--text-secondary);
 }
 
 /* 状态栏 */

@@ -24,6 +24,8 @@ export function OpenFileDialog():Promise<string>;
 
 export function ReadArticle(arg1:string):Promise<models.ReadArticleResponse>;
 
+export function RenameArticleByTitle(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function SaveArticle(arg1:string,arg2:string):Promise<void>;
 
 export function SaveArticleAs(arg1:string,arg2:string,arg3:string):Promise<models.Article>;

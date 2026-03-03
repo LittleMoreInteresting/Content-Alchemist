@@ -242,6 +242,20 @@ export function useWails() {
     });
   };
 
+  /**
+   * 根据标题重命名文章文件
+   * 返回新的文件路径
+   */
+  const renameArticleByTitle = async (
+    uuid: string,
+    newTitle: string,
+    content: string
+  ): Promise<string> => {
+    return wrapAsync(async () => {
+      return await App.RenameArticleByTitle(uuid, newTitle, content);
+    });
+  };
+
   // ============================================
   // 文件系统操作
   // ============================================
@@ -298,6 +312,9 @@ export function useWails() {
     // 文件系统
     checkFileExists,
     getFileInfo,
+
+    // 标题重命名
+    renameArticleByTitle,
 
     // 工具
     clearError,

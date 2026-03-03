@@ -90,7 +90,7 @@
     <!-- 文章信息 -->
     <div class="toolbar-group article-info" v-if="article">
       <span class="info-item" :title="article.filePath">
-        {{ formatFileName(article.filePath) }}
+        {{ article.title || formatFileName(article.filePath) }}
       </span>
     </div>
 

@@ -562,6 +562,66 @@ func (a *App) CheckFileExists(filePath string) (bool, error) {
 	return a.fileMgr.CheckFileExists(filePath)
 }
 
+// RenameArticleByTitle 根据新标题重命名文章文件
+// 返回新的文件路径
+func (a *App) RenameArticleByTitle(uuid string, newTitle string, content string) (string, error) {
+	if a.db == nil {
+		return "", fmt.Errorf("数据库未初始化")
+	}
+
+	// 获取文章记录
+	article, err := a.db.GetArticleByUUID(uuid)
+	if err != nil {
+		return "", fmt.Errorf("查询文章失败: %w", err)
+	}
+
+	if article == nil {
+		return "", models.FileError{
+			Code:    "ARTICLE_NOT_FOUND",
+			Message: fmt.Sprintf("未找到UUID对应的文章: %s", uuid),
+		}
+	}
+
+	// 清理标题，作为文件名
+	newFilename := a.fileMgr.SanitizeFilename(newTitle)
+	if newFilename == "" {
+		newFilename = "untitled"
+	}
+
+	// 获取原文件所在目录
+	oldDir := filepath.Dir(article.FilePath)
+
+	// 生成新的文件路径
+	newPath := a.fileMgr.GenerateUniqueFilename(oldDir, newFilename)
+
+	// 如果是不同路径，执行文件重命名操作
+	if filepath.Clean(newPath) != filepath.Clean(article.FilePath) {
+		// 写入新文件
+		if err := a.fileMgr.WriteFileContent(newPath, content); err != nil {
+			return "", err
+		}
+
+		// 删除旧文件
+		if err := os.Remove(article.FilePath); err != nil && !os.IsNotExist(err) {
+			// 删除新文件，回滚
+			os.Remove(newPath)
+			return "", fmt.Errorf("删除旧文件失败: %w", err)
+		}
+
+		// 更新文件路径
+		article.FilePath = newPath
+	}
+
+	// 更新标题和元数据
+	article.Title = newTitle
+	a.fileMgr.UpdateArticleFromContent(article, content)
+	if err := a.db.UpdateArticle(article); err != nil {
+		return "", fmt.Errorf("更新文章记录失败: %w", err)
+	}
+
+	return article.FilePath, nil
+}
+
 // GetFileInfo 获取文件信息
 func (a *App) GetFileInfo(filePath string) (map[string]interface{}, error) {
 	filePath = filepath.Clean(filePath)
