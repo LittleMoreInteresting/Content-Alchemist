@@ -60,6 +60,14 @@ type ArticleWithContent struct {
 	Content string  `json:"content"`
 }
 
+// AIConfig AI配置
+type AIConfig struct {
+	BaseURL    string  `json:"baseUrl"`
+	Token      string  `json:"token"`
+	Temperature float64 `json:"temperature"`
+	Model      string  `json:"model"`
+}
+
 // EditorSettings 编辑器设置
 type EditorSettings struct {
 	DeepseekAPIKey string `json:"deepseekApiKey"`

@@ -1,5 +1,23 @@
 export namespace models {
 	
+	export class AIConfig {
+	    baseUrl: string;
+	    token: string;
+	    temperature: number;
+	    model: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AIConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.baseUrl = source["baseUrl"];
+	        this.token = source["token"];
+	        this.temperature = source["temperature"];
+	        this.model = source["model"];
+	    }
+	}
 	export class Article {
 	    id: number;
 	    uuid: string;

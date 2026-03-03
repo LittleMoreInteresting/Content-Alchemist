@@ -12,6 +12,8 @@ export function DeleteArticle(arg1:string):Promise<void>;
 
 export function DeleteArticleAndFile(arg1:string):Promise<void>;
 
+export function GetAIConfig():Promise<models.AIConfig>;
+
 export function GetArticleByUUID(arg1:string):Promise<models.Article>;
 
 export function GetFileInfo(arg1:string):Promise<Record<string, any>>;
@@ -25,6 +27,8 @@ export function OpenFileDialog():Promise<string>;
 export function ReadArticle(arg1:string):Promise<models.ReadArticleResponse>;
 
 export function RenameArticleByTitle(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function SaveAIConfig(arg1:models.AIConfig):Promise<void>;
 
 export function SaveArticle(arg1:string,arg2:string):Promise<void>;
 

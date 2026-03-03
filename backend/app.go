@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -643,4 +644,68 @@ func (a *App) GetFileInfo(filePath string) (map[string]interface{}, error) {
 		"modTime": info.ModTime().Unix(),
 		"path":    filePath,
 	}, nil
+}
+
+// ============================================
+// Wails绑定方法 - AI配置
+// ============================================
+
+// GetAIConfig 获取AI配置
+func (a *App) GetAIConfig() (*models.AIConfig, error) {
+	if a.db == nil {
+		return nil, fmt.Errorf("数据库未初始化")
+	}
+
+	config := &models.AIConfig{
+		BaseURL:     "https://api.deepseek.com/v1",
+		Token:       "",
+		Temperature: 0.7,
+		Model:       "deepseek-chat",
+	}
+
+	if baseURL, err := a.db.GetSetting("ai_base_url"); err == nil && baseURL != "" {
+		config.BaseURL = baseURL
+	}
+
+	if token, err := a.db.GetSetting("ai_token"); err == nil {
+		config.Token = token
+	}
+
+	if temp, err := a.db.GetSetting("ai_temperature"); err == nil && temp != "" {
+		if t, err := strconv.ParseFloat(temp, 64); err == nil {
+			config.Temperature = t
+		}
+	}
+
+	if model, err := a.db.GetSetting("ai_model"); err == nil && model != "" {
+		config.Model = model
+	}
+
+	return config, nil
+}
+
+// SaveAIConfig 保存AI配置
+func (a *App) SaveAIConfig(config *models.AIConfig) error {
+	if a.db == nil {
+		return fmt.Errorf("数据库未初始化")
+	}
+
+	if err := a.db.SetSetting("ai_base_url", config.BaseURL); err != nil {
+		return fmt.Errorf("保存base_url失败: %w", err)
+	}
+
+	if err := a.db.SetSetting("ai_token", config.Token); err != nil {
+		return fmt.Errorf("保存token失败: %w", err)
+	}
+
+	tempStr := strconv.FormatFloat(config.Temperature, 'f', 2, 64)
+	if err := a.db.SetSetting("ai_temperature", tempStr); err != nil {
+		return fmt.Errorf("保存temperature失败: %w", err)
+	}
+
+	if err := a.db.SetSetting("ai_model", config.Model); err != nil {
+		return fmt.Errorf("保存model失败: %w", err)
+	}
+
+	return nil
 }

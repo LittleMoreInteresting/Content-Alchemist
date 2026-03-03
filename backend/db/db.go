@@ -110,6 +110,9 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
 ('editor_theme', 'github-dark'),
 ('font_size', '16'),
 ('ai_model', 'deepseek-chat'),
+('ai_base_url', 'https://api.deepseek.com/v1'),
+('ai_token', ''),
+('ai_temperature', '0.7'),
 ('window_width', '1400'),
 ('window_height', '900');
 `

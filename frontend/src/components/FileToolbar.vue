@@ -47,6 +47,19 @@
     <!-- 分隔线 -->
     <div class="toolbar-separator"></div>
 
+    <!-- 设置按钮 -->
+    <button
+      class="toolbar-btn"
+      @click="handleSettings"
+      title="设置 (Ctrl+,)"
+    >
+      <span class="icon">⚙️</span>
+      <span>设置</span>
+    </button>
+
+    <!-- 分隔线 -->
+    <div class="toolbar-separator"></div>
+
     <!-- 最近文件 -->
     <div class="toolbar-group recent-dropdown" v-if="recentArticles.length > 0">
       <button
@@ -149,6 +162,8 @@ interface Emits {
   (e: 'save'): void;
   /** 请求另存为 */
   (e: 'saveAs'): void;
+  /** 打开设置 */
+  (e: 'settings'): void;
   /** 错误 */
   (e: 'error', message: string): void;
 }
@@ -265,6 +280,13 @@ const handleSave = (): void => {
  */
 const handleSaveAs = (): void => {
   emit('saveAs');
+};
+
+/**
+ * 处理设置
+ */
+const handleSettings = (): void => {
+  emit('settings');
 };
 
 /**

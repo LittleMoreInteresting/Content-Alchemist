@@ -22,6 +22,10 @@ export function DeleteArticleAndFile(arg1) {
   return window['go']['backend']['App']['DeleteArticleAndFile'](arg1);
 }
 
+export function GetAIConfig() {
+  return window['go']['backend']['App']['GetAIConfig']();
+}
+
 export function GetArticleByUUID(arg1) {
   return window['go']['backend']['App']['GetArticleByUUID'](arg1);
 }
@@ -48,6 +52,10 @@ export function ReadArticle(arg1) {
 
 export function RenameArticleByTitle(arg1, arg2, arg3) {
   return window['go']['backend']['App']['RenameArticleByTitle'](arg1, arg2, arg3);
+}
+
+export function SaveAIConfig(arg1) {
+  return window['go']['backend']['App']['SaveAIConfig'](arg1);
 }
 
 export function SaveArticle(arg1, arg2) {

@@ -12,6 +12,14 @@ export type Article = models.Article;
 export type ReadArticleResponse = models.ReadArticleResponse;
 export type FileInfo = Record<string, any>;
 
+// AI配置类型
+export interface AIConfig {
+  baseUrl: string;
+  token: string;
+  temperature: number;
+  model: string;
+}
+
 export type FileErrorCode =
   | 'FILE_NOT_FOUND'
   | 'PERMISSION_DENIED'
@@ -278,6 +286,28 @@ export function useWails() {
     });
   };
 
+  // ============================================
+  // AI配置操作
+  // ============================================
+
+  /**
+   * 获取AI配置
+   */
+  const getAIConfig = async (): Promise<AIConfig> => {
+    return wrapAsync(async () => {
+      return await App.GetAIConfig();
+    });
+  };
+
+  /**
+   * 保存AI配置
+   */
+  const saveAIConfig = async (config: AIConfig): Promise<void> => {
+    return wrapAsync(async () => {
+      await App.SaveAIConfig(config);
+    });
+  };
+
   /**
    * 清除错误
    */
@@ -315,6 +345,10 @@ export function useWails() {
 
     // 标题重命名
     renameArticleByTitle,
+
+    // AI配置
+    getAIConfig,
+    saveAIConfig,
 
     // 工具
     clearError,

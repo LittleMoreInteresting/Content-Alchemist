@@ -10,6 +10,7 @@
       @open="handleOpen"
       @save="handleSave"
       @saveAs="handleSaveAs"
+      @settings="showSettings = true"
       @error="handleError"
     />
 
@@ -134,6 +135,7 @@
     <!-- 设置弹窗 -->
     <SettingsModal
       v-model:visible="showSettings"
+      :initial-config="aiConfig"
       @save="handleSettingsSave"
     />
   </div>
@@ -145,7 +147,7 @@ import MarkdownIt from 'markdown-it';
 import FileToolbar from './FileToolbar.vue';
 import RecentArticles from './RecentArticles.vue';
 import AIMenu from './AIMenu.vue';
-import SettingsModal from './SettingsModal.vue';
+import SettingsModal, { type AIConfig } from './SettingsModal.vue';
 import { useEditor } from '../composables/useEditor';
 import { useWails } from '../composables/useWails';
 
@@ -178,6 +180,12 @@ const previewOnly = ref(false);
 const syncScroll = ref(true);
 const showOutline = ref(false);
 const showSettings = ref(false);
+const aiConfig = ref<AIConfig>({
+  baseUrl: 'https://api.deepseek.com/v1',
+  token: '',
+  temperature: 0.7,
+  model: 'deepseek-chat'
+});
 const showAIMenu = ref(false);
 const selectedText = ref('');
 const aiMenuPosition = ref({ x: 0, y: 0 });
@@ -318,11 +326,26 @@ const handleAIApply = (result: string) => {
 };
 
 // ============================================
-// 设置
+// AI配置
 // ============================================
-const handleSettingsSave = (settings: Record<string, unknown>) => {
-  console.log('保存设置:', settings);
-  showSettings.value = false;
+const loadAIConfig = async () => {
+  try {
+    const config = await wails.getAIConfig();
+    aiConfig.value = config;
+  } catch (err) {
+    console.error('加载AI配置失败:', err);
+  }
+};
+
+const handleSettingsSave = async (config: AIConfig) => {
+  try {
+    await wails.saveAIConfig(config);
+    aiConfig.value = config;
+    console.log('AI配置已保存');
+  } catch (err) {
+    console.error('保存AI配置失败:', err);
+    handleError(err instanceof Error ? err.message : '保存配置失败');
+  }
 };
 
 // ============================================
@@ -350,6 +373,7 @@ const handleKeyDown = (e: KeyboardEvent) => {
 
 onMounted(() => {
   document.addEventListener('keydown', handleKeyDown);
+  loadAIConfig();
 });
 
 onUnmounted(() => {
