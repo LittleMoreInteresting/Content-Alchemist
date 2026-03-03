@@ -12,6 +12,8 @@ export function DeleteArticle(arg1:string):Promise<void>;
 
 export function DeleteArticleAndFile(arg1:string):Promise<void>;
 
+export function GenerateOutline(arg1:string):Promise<string>;
+
 export function GetAIConfig():Promise<models.AIConfig>;
 
 export function GetArticleByUUID(arg1:string):Promise<models.Article>;

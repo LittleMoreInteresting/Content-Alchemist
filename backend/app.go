@@ -3,6 +3,7 @@
 package backend
 
 import (
+	"Content-Alchemist/backend/ai"
 	"Content-Alchemist/backend/db"
 	"Content-Alchemist/backend/editor"
 	"Content-Alchemist/backend/models"
@@ -20,6 +21,7 @@ type App struct {
 	ctx       context.Context
 	db        *db.DB
 	fileMgr   *editor.FileManager
+	aiService *ai.Service
 	configDir string
 }
 
@@ -48,6 +50,9 @@ func (a *App) Startup(ctx context.Context) {
 		fmt.Printf("无法初始化数据库: %v\n", err)
 	}
 	a.db = database
+
+	// 初始化 AI 服务
+	a.initAIService()
 }
 
 // Shutdown 在应用关闭时调用（Wails生命周期）
@@ -707,5 +712,45 @@ func (a *App) SaveAIConfig(config *models.AIConfig) error {
 		return fmt.Errorf("保存model失败: %w", err)
 	}
 
+	// 更新 AI 服务配置
+	if a.aiService != nil {
+		a.aiService.UpdateConfig(config)
+	}
+
 	return nil
+}
+
+// ============================================
+// AI 服务相关
+// ============================================
+
+// initAIService 初始化 AI 服务
+func (a *App) initAIService() {
+	config, err := a.GetAIConfig()
+	if err != nil {
+		fmt.Printf("获取AI配置失败: %v\n", err)
+		return
+	}
+	a.aiService = ai.NewService(config)
+}
+
+// GenerateOutline 根据标题生成大纲
+// title: 文章标题
+// 返回: 生成的大纲内容
+func (a *App) GenerateOutline(title string) (string, error) {
+	if a.aiService == nil {
+		// 重新初始化 AI 服务
+		a.initAIService()
+	}
+
+	if title == "" {
+		return "", fmt.Errorf("标题不能为空")
+	}
+
+	outline, err := a.aiService.GenerateOutlineByTitle(title)
+	if err != nil {
+		return "", err
+	}
+
+	return outline, nil
 }

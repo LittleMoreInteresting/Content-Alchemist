@@ -31,14 +31,25 @@
       <div class="editor-container">
         <!-- 标题编辑区 -->
         <div v-if="editor.article.value" class="title-editor">
-          <input
-            type="text"
-            v-model="editableTitle"
-            @blur="handleTitleBlur"
-            @keydown.enter="handleTitleEnter"
-            placeholder="输入文章标题..."
-            class="title-input"
-          />
+          <div class="title-input-wrapper">
+            <input
+              type="text"
+              v-model="editableTitle"
+              @blur="handleTitleBlur"
+              @keydown.enter="handleTitleEnter"
+              placeholder="输入文章标题..."
+              class="title-input"
+            />
+            <button
+              class="generate-outline-btn"
+              :disabled="isGeneratingOutline || !editableTitle"
+              @click="handleGenerateOutline"
+              title="根据标题生成大纲"
+            >
+              <span v-if="isGeneratingOutline" class="loading-spinner-small"></span>
+              <span v-else>✨ 生成大纲</span>
+            </button>
+          </div>
         </div>
 
         <div class="editor-layout" :class="{ 'preview-only': previewOnly }">
@@ -192,12 +203,45 @@ const aiMenuPosition = ref({ x: 0, y: 0 });
 const previewRef = ref<HTMLElement | null>(null);
 const editorRef = ref<HTMLTextAreaElement | null>(null);
 const editableTitle = ref('');
+const isGeneratingOutline = ref(false);
 
 /**
  * 聚焦到编辑器
  */
 const focusEditor = (): void => {
   editorRef.value?.focus();
+};
+
+// ============================================
+// 生成大纲功能
+// ============================================
+
+/**
+ * 根据标题生成大纲
+ */
+const handleGenerateOutline = async (): Promise<void> => {
+  if (!editableTitle.value) {
+    handleError('请先输入文章标题');
+    return;
+  }
+
+  isGeneratingOutline.value = true;
+
+  try {
+    const outline = await wails.generateOutline(editableTitle.value);
+
+    // 将生成的大纲设置到编辑器内容中
+    if (outline) {
+      // 如果有标题，在第一行添加标题
+      const content = `# ${editableTitle.value}\n\n${outline}`;
+      editor.setContent(content);
+    }
+  } catch (err) {
+    console.error('生成大纲失败:', err);
+    handleError(err instanceof Error ? err.message : '生成大纲失败');
+  } finally {
+    isGeneratingOutline.value = false;
+  }
 };
 
 // ============================================
@@ -532,8 +576,14 @@ onUnmounted(() => {
   border-bottom: 1px solid var(--border-color);
 }
 
+.title-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .title-input {
-  width: 100%;
+  flex: 1;
   padding: 8px 12px;
   border: 1px solid var(--border-color);
   border-radius: 4px;
@@ -552,6 +602,46 @@ onUnmounted(() => {
 
 .title-input::placeholder {
   color: var(--text-secondary);
+}
+
+.generate-outline-btn {
+  padding: 8px 16px;
+  border: 1px solid var(--color-primary);
+  border-radius: 4px;
+  background: var(--color-primary);
+  color: white;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.generate-outline-btn:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+.generate-outline-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.loading-spinner-small {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* 状态栏 */

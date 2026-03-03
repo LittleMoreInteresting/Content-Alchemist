@@ -309,6 +309,15 @@ export function useWails() {
   };
 
   /**
+   * 根据标题生成大纲
+   */
+  const generateOutline = async (title: string): Promise<string> => {
+    return wrapAsync(async () => {
+      return await App.GenerateOutline(title);
+    });
+  };
+
+  /**
    * 清除错误
    */
   const clearError = (): void => {
@@ -349,6 +358,9 @@ export function useWails() {
     // AI配置
     getAIConfig,
     saveAIConfig,
+
+    // AI生成
+    generateOutline,
 
     // 工具
     clearError,

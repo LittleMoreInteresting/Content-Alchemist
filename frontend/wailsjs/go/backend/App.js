@@ -22,6 +22,10 @@ export function DeleteArticleAndFile(arg1) {
   return window['go']['backend']['App']['DeleteArticleAndFile'](arg1);
 }
 
+export function GenerateOutline(arg1) {
+  return window['go']['backend']['App']['GenerateOutline'](arg1);
+}
+
 export function GetAIConfig() {
   return window['go']['backend']['App']['GetAIConfig']();
 }
