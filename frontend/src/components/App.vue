@@ -2,172 +2,117 @@
   <div class="app">
     <!-- 顶部工具栏 -->
     <FileToolbar
-      :article="editor.article.value"
-      :is-dirty="editor.isDirty.value"
-      :is-saving="editor.isSaving.value"
-      :can-save="editor.canSave.value"
-      @new="handleNew"
-      @open="handleOpen"
+      :title="articleTitle"
+      :is-dirty="isDirty"
+      :is-saving="isSaving"
+      :can-save="canSave"
       @save="handleSave"
-      @saveAs="handleSaveAs"
       @settings="showSettings = true"
       @error="handleError"
     />
 
     <!-- 主体区域 -->
     <div class="main-container">
-      <!-- 左侧边栏：最近文章 -->
+      <!-- 左侧边栏：写作助手 -->
       <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
-        <RecentArticles
-          ref="recentArticlesRef"
-          :current-path="editor.filePath.value"
-          @select="handleOpen"
-          @open="handleOpenClick"
+        <WritingSidebar
+          ref="sidebarRef"
+          v-model:title="articleTitle"
+          v-model:outline="articleOutline"
+          v-model:requirements="writingRequirements"
+          :positioning="savedPositioning"
+          :is-generating-outline="isGeneratingOutline"
+          :is-generating-article="isGeneratingArticle"
+          @generate-outline="handleGenerateOutline"
+          @generate-article="handleGenerateArticle"
+          @open-recent="handleOpenRecent"
           @error="handleError"
         />
       </aside>
 
       <!-- 编辑器和预览区域 -->
       <div class="editor-container">
-        <!-- 标题编辑区 -->
-        <div v-if="editor.article.value" class="title-editor">
-          <div class="title-input-wrapper">
-            <input
-              type="text"
-              v-model="editableTitle"
-              @blur="handleTitleBlur"
-              @keydown.enter="handleTitleEnter"
-              placeholder="输入文章标题..."
-              class="title-input"
-            />
-            <button
-              class="generate-outline-btn"
-              :disabled="isGeneratingOutline || !editableTitle"
-              @click="handleGenerateOutline"
-              title="根据标题生成大纲"
-            >
-              <span v-if="isGeneratingOutline" class="loading-spinner-small"></span>
-              <span v-else>✨ 生成大纲</span>
-            </button>
+        <!-- 编辑区域 -->
+        <div class="editor-pane">
+          <div class="pane-header">
+            <span class="pane-title">✏️ 编辑</span>
+            <span class="pane-subtitle" v-if="!articleOutline">输入大纲或文章内容</span>
+            <span class="pane-subtitle" v-else-if="!articleContent">基于大纲生成文章</span>
+            <span class="pane-subtitle" v-else>编辑文章内容</span>
+          </div>
+          <div class="editor-content">
+            <textarea
+              ref="editorRef"
+              v-model="editorContent"
+              placeholder="开始写作..."
+              class="markdown-editor"
+              spellcheck="false"
+            ></textarea>
           </div>
         </div>
 
-        <div class="editor-layout" :class="{ 'preview-only': previewOnly }">
-          <!-- 编辑区域 -->
-          <div class="editor-pane" v-show="!previewOnly">
-            <div class="pane-header">
-              <span class="pane-title">编辑</span>
-              <div class="pane-actions">
-                <button
-                  class="pane-btn"
-                  :class="{ active: syncScroll }"
-                  @click="syncScroll = !syncScroll"
-                  title="同步滚动"
-                >
-                  同步
-                </button>
-                <button class="pane-btn" @click="previewOnly = true" title="隐藏编辑">
-                  →
-                </button>
-              </div>
-            </div>
-            <div class="editor-content">
-              <textarea
-                ref="editorRef"
-                :value="editor.content.value"
-                @input="e => editor.setContent((e.target as HTMLTextAreaElement).value)"
-                @scroll="handleEditorScroll"
-                placeholder="开始写作..."
-                class="markdown-editor"
-                spellcheck="false"
-              ></textarea>
+        <!-- 预览区域 -->
+        <div class="preview-pane">
+          <div class="pane-header">
+            <span class="pane-title">👁️ 预览</span>
+            <div class="pane-actions">
+              <button
+                class="pane-btn"
+                :class="{ active: showOutline }"
+                @click="showOutline = !showOutline"
+                title="显示/隐藏目录"
+              >
+                目录
+              </button>
             </div>
           </div>
-
-          <!-- 预览区域 -->
-          <div class="preview-pane" :class="{ expanded: previewOnly }">
-            <div class="pane-header">
-              <div class="pane-actions">
-                <button class="pane-btn" @click="previewOnly = false" title="显示编辑" v-if="previewOnly">
-                  ←
-                </button>
-              </div>
-              <span class="pane-title">预览</span>
-              <div class="pane-actions">
-                <button
-                  class="pane-btn"
-                  :class="{ active: showOutline }"
-                  @click="showOutline = !showOutline"
-                  title="目录"
-                >
-                  目录
-                </button>
-              </div>
-            </div>
-            <div class="preview-content" ref="previewRef" @scroll="handlePreviewScroll">
-              <div class="markdown-body" v-html="renderedContent"></div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 底部状态栏 -->
-        <div class="status-bar">
-          <div class="status-left">
-            <span class="status-item" :class="{ dirty: editor.isDirty.value }">
-              {{ editor.isSaving.value ? '保存中...' : editor.isDirty.value ? '未保存' : '已保存' }}
-            </span>
-            <span class="status-separator">|</span>
-            <span class="status-item">
-              字数: {{ editor.wordCount.value }}
-            </span>
-            <span class="status-separator">|</span>
-            <span class="status-item" v-if="editor.article.value">
-              {{ formatFileName(editor.article.value.filePath) }}
-            </span>
-          </div>
-          <div class="status-right">
-            <button class="status-btn" @click="sidebarCollapsed = !sidebarCollapsed">
-              {{ sidebarCollapsed ? '显示侧边栏' : '隐藏侧边栏' }}
-            </button>
+          <div class="preview-content" ref="previewRef">
+            <div class="markdown-body" v-html="renderedContent"></div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- AI 浮动菜单 -->
-    <AIMenu
-      v-if="showAIMenu"
-      :selected-text="selectedText"
-      :position="aiMenuPosition"
-      @apply="handleAIApply"
-      @close="showAIMenu = false"
+    <!-- 全局 Loading 遮罩 -->
+    <div v-if="isLoading" class="global-loading">
+      <div class="loading-spinner-large"></div>
+      <p class="loading-text">{{ loadingText }}</p>
+    </div>
+
+    <!-- 标题选择弹窗 -->
+    <TitleSelectorModal
+      v-model:visible="showTitleSelector"
+      :titles="candidateTitles"
+      :original-title="articleTitle"
+      @select="handleTitleSelected"
     />
 
     <!-- 设置弹窗 -->
     <SettingsModal
       v-model:visible="showSettings"
       :initial-config="aiConfig"
+      :initial-positioning="savedPositioning"
       @save="handleSettingsSave"
+      @save-positioning="handlePositioningSave"
     />
+
+    <!-- 错误提示 -->
+    <Transition name="toast">
+      <div v-if="errorMessage" class="error-toast" @click="errorMessage = ''">
+        {{ errorMessage }}
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import MarkdownIt from 'markdown-it';
 import FileToolbar from './FileToolbar.vue';
-import RecentArticles from './RecentArticles.vue';
-import AIMenu from './AIMenu.vue';
+import WritingSidebar from './WritingSidebar.vue';
+import TitleSelectorModal from './TitleSelectorModal.vue';
 import SettingsModal, { type AIConfig } from './SettingsModal.vue';
-import { useEditor } from '../composables/useEditor';
 import { useWails } from '../composables/useWails';
-
-// ============================================
-// 编辑器状态
-// ============================================
-const editor = useEditor(2000);
-const wails = useWails();
-const recentArticlesRef = ref<InstanceType<typeof RecentArticles> | null>(null);
 
 // ============================================
 // Markdown 渲染
@@ -179,200 +124,292 @@ const md = new MarkdownIt({
   breaks: true,
 });
 
-const renderedContent = computed(() => {
-  return md.render(editor.content.value);
-});
+// ============================================
+// 状态
+// ============================================
+const wails = useWails();
+const sidebarRef = ref<InstanceType<typeof WritingSidebar> | null>(null);
 
-// ============================================
+// 文章状态
+const articleTitle = ref('');
+const articleOutline = ref('');
+const articleContent = ref('');
+const editorContent = ref('');
+const writingRequirements = ref('');
+const savedPositioning = ref('');
+const currentUUID = ref('');
+const filePath = ref('');
+const candidateTitles = ref<string[]>([]);
+
 // UI 状态
-// ============================================
 const sidebarCollapsed = ref(false);
-const previewOnly = ref(false);
-const syncScroll = ref(true);
 const showOutline = ref(false);
 const showSettings = ref(false);
+const showTitleSelector = ref(false);
+const errorMessage = ref('');
+const isSaving = ref(false);
+const isDirty = ref(false);
+const isGeneratingOutline = ref(false);
+const isGeneratingArticle = ref(false);
+const isLoading = ref(false);
+const loadingText = ref('');
+
+// AI 配置
 const aiConfig = ref<AIConfig>({
   baseUrl: 'https://api.deepseek.com/v1',
   token: '',
   temperature: 0.7,
   model: 'deepseek-chat'
 });
-const showAIMenu = ref(false);
-const selectedText = ref('');
-const aiMenuPosition = ref({ x: 0, y: 0 });
-const previewRef = ref<HTMLElement | null>(null);
-const editorRef = ref<HTMLTextAreaElement | null>(null);
-const editableTitle = ref('');
-const isGeneratingOutline = ref(false);
 
-/**
- * 聚焦到编辑器
- */
-const focusEditor = (): void => {
-  editorRef.value?.focus();
+// ============================================
+// 计算属性
+// ============================================
+const canSave = computed(() => {
+  return isDirty.value && !isSaving.value && articleTitle.value !== '';
+});
+
+const renderedContent = computed(() => {
+  return md.render(editorContent.value);
+});
+
+// 监听编辑器内容变化
+watch(editorContent, (newValue, oldValue) => {
+  if (oldValue !== undefined && newValue !== oldValue) {
+    isDirty.value = true;
+    
+    // 更新大纲或文章内容
+    if (!articleContent.value && articleOutline.value) {
+      // 如果还没有正式生成文章，编辑的是大纲
+      articleOutline.value = newValue;
+    } else {
+      // 编辑的是文章内容
+      articleContent.value = newValue;
+    }
+  }
+});
+
+// ============================================
+// Loading 控制
+// ============================================
+const showLoading = (text: string) => {
+  loadingText.value = text;
+  isLoading.value = true;
+};
+
+const hideLoading = () => {
+  isLoading.value = false;
+  loadingText.value = '';
 };
 
 // ============================================
-// 生成大纲功能
+// 保存功能
 // ============================================
+const handleSave = async (): Promise<void> => {
+  if (!canSave.value) return;
 
-/**
- * 根据标题生成大纲
- */
+  isSaving.value = true;
+
+  try {
+    const result = await wails.saveArticleWithSmartNaming(
+      currentUUID.value,
+      articleTitle.value,
+      editorContent.value
+    );
+
+    if (result) {
+      currentUUID.value = result.uuid;
+      filePath.value = result.filePath;
+      isDirty.value = false;
+      // 刷新最近文章列表
+      sidebarRef.value?.loadRecentArticles();
+    }
+  } catch (err) {
+    console.error('保存失败:', err);
+    handleError(err instanceof Error ? err.message : '保存失败');
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+// ============================================
+// 生成大纲
+// ============================================
 const handleGenerateOutline = async (): Promise<void> => {
-  if (!editableTitle.value) {
+  if (!articleTitle.value) {
     handleError('请先输入文章标题');
     return;
   }
 
   isGeneratingOutline.value = true;
+  showLoading('正在生成大纲和候选标题...');
 
   try {
-    const outline = await wails.generateOutline(editableTitle.value);
-
-    // 将生成的大纲设置到编辑器内容中
-    if (outline) {
-      // 如果有标题，在第一行添加标题
-      const content = `# ${editableTitle.value}\n\n${outline}`;
-      editor.setContent(content);
+    // 调用生成大纲接口，传入标题、写作要求、公众号定位
+    const result = await wails.generateOutline(
+      articleTitle.value,
+      writingRequirements.value,
+      savedPositioning.value
+    );
+    
+    if (result) {
+      // 保存候选标题
+      candidateTitles.value = result.titles;
+      
+      // 保存大纲
+      articleOutline.value = result.outline;
+      
+      // 显示标题选择弹窗
+      if (candidateTitles.value.length > 0) {
+        showTitleSelector.value = true;
+      } else {
+        // 如果没有候选标题，直接显示大纲
+        editorContent.value = articleOutline.value;
+        isDirty.value = true;
+        // 自动保存
+        await autoSave();
+      }
     }
   } catch (err) {
     console.error('生成大纲失败:', err);
     handleError(err instanceof Error ? err.message : '生成大纲失败');
   } finally {
     isGeneratingOutline.value = false;
+    hideLoading();
   }
 };
 
 // ============================================
-// 滚动同步
+// 标题选择处理
 // ============================================
-const handleEditorScroll = (e: Event) => {
-  if (!syncScroll.value || !previewRef.value) return;
-
-  const textarea = e.target as HTMLTextAreaElement;
-  const scrollRatio = textarea.scrollTop / (textarea.scrollHeight - textarea.clientHeight || 1);
-  const previewScrollTop = scrollRatio * (previewRef.value.scrollHeight - previewRef.value.clientHeight);
-
-  previewRef.value.scrollTop = previewScrollTop;
-};
-
-const handlePreviewScroll = () => {
-  // 目前只支持编辑器到预览的单向同步
-  // 双向同步会导致循环，需要更复杂的处理
+const handleTitleSelected = async (selectedTitle: string): Promise<void> => {
+  // 更新文章标题
+  articleTitle.value = selectedTitle;
+  
+  // 显示大纲到编辑器
+  editorContent.value = articleOutline.value;
+  isDirty.value = true;
+  
+  // 自动保存
+  await autoSave();
 };
 
 // ============================================
-// 文件操作
+// 自动保存
 // ============================================
-const handleNew = async () => {
-  const success = await editor.createNew();
-  if (success) {
-    recentArticlesRef.value?.refresh();
-    // 同步标题到编辑框
-    editableTitle.value = editor.article.value?.title || '';
-  }
-};
-
-const handleOpen = async (filePath: string) => {
+const autoSave = async (): Promise<void> => {
+  if (!articleTitle.value || !editorContent.value) return;
+  
+  isSaving.value = true;
+  
   try {
-    await editor.loadArticle(filePath);
-    // 同步标题到编辑框
-    editableTitle.value = editor.article.value?.title || '';
-  } catch (err) {
-    handleError(err instanceof Error ? err.message : '打开文件失败');
-  }
-};
+    const result = await wails.saveArticleWithSmartNaming(
+      currentUUID.value,
+      articleTitle.value,
+      editorContent.value
+    );
 
-const handleOpenClick = async () => {
-  // 打开文件对话框
-  try {
-    const filePath = await wails.openFileDialog();
-    if (filePath) {
-      await handleOpen(filePath);
+    if (result) {
+      currentUUID.value = result.uuid;
+      filePath.value = result.filePath;
+      isDirty.value = false;
+      // 刷新最近文章列表
+      sidebarRef.value?.loadRecentArticles();
     }
   } catch (err) {
-    handleError(err instanceof Error ? err.message : '打开文件失败');
-  }
-};
-
-const handleSave = async () => {
-  await editor.saveNow();
-};
-
-const handleSaveAs = async () => {
-  const newArticle = await editor.saveAs();
-  if (newArticle) {
-    recentArticlesRef.value?.refresh();
+    console.error('自动保存失败:', err);
+    // 自动保存失败不提示错误，避免打扰用户
+  } finally {
+    isSaving.value = false;
   }
 };
 
 // ============================================
-// 标题编辑
+// 文章生成处理
 // ============================================
-
-/**
- * 同步标题到文章
- */
-const syncTitleToArticle = async (): Promise<void> => {
-  if (!editor.article.value || editableTitle.value === editor.article.value.title) {
+const handleGenerateArticle = async (): Promise<void> => {
+  if (!articleTitle.value) {
+    handleError('请先输入文章标题');
     return;
   }
 
+  if (!articleOutline.value) {
+    handleError('请先生成大纲');
+    return;
+  }
+
+  isGeneratingArticle.value = true;
+  showLoading('正在生成文章内容，请稍候...');
+
   try {
-    const newPath = await wails.renameArticleByTitle(
-      editor.article.value.uuid,
-      editableTitle.value,
-      editor.content.value
+    // 合并写作要求和公众号定位
+    const combinedRequirements = [
+      writingRequirements.value,
+      savedPositioning.value ? `公众号定位：${savedPositioning.value}` : '',
+    ].filter(Boolean).join('\n\n');
+
+    const content = await wails.generateArticle(
+      articleTitle.value,
+      articleOutline.value,
+      combinedRequirements
     );
 
-    if (newPath) {
-      // 更新本地文章路径
-      editor.article.value.filePath = newPath;
-      editor.article.value.title = editableTitle.value;
+    if (content) {
+      // 添加标题到文章内容
+      const fullContent = `# ${articleTitle.value}\n\n${content}`;
+      articleContent.value = fullContent;
+      editorContent.value = fullContent;
+      isDirty.value = true;
+      
+      // 生成文章后自动保存
+      await autoSave();
     }
   } catch (err) {
-    console.error('更新标题失败:', err);
-    handleError(err instanceof Error ? err.message : '更新标题失败');
-    // 重新加载文章以获取正确的状态
-    if (editor.article.value) {
-      try {
-        await editor.loadArticle(editor.article.value.filePath);
-        editableTitle.value = editor.article.value?.title || '';
-      } catch (reloadErr) {
-        console.error('重新加载文章失败:', reloadErr);
-      }
-    }
+    console.error('生成文章失败:', err);
+    handleError(err instanceof Error ? err.message : '生成文章失败');
+  } finally {
+    isGeneratingArticle.value = false;
+    hideLoading();
   }
 };
 
-/**
- * 处理标题失焦
- */
-const handleTitleBlur = (): void => {
-  syncTitleToArticle();
+// ============================================
+// 打开最近文章
+// ============================================
+const handleOpenRecent = async (path: string): Promise<void> => {
+  if (isDirty.value) {
+    const confirmed = window.confirm('当前文章有未保存的更改，是否继续打开其他文章？');
+    if (!confirmed) return;
+  }
+
+  try {
+    const { article, content } = await wails.readArticle(path);
+    
+    if (article) {
+      currentUUID.value = article.uuid;
+      filePath.value = article.filePath;
+      articleTitle.value = article.title || '';
+      editorContent.value = content;
+      articleContent.value = content;
+      
+      // 尝试从内容中提取大纲
+      const outlineMatch = content.match(/##?\s+.+$/m);
+      if (outlineMatch) {
+        articleOutline.value = outlineMatch[0];
+      }
+      
+      isDirty.value = false;
+    }
+  } catch (err) {
+    console.error('打开文章失败:', err);
+    handleError(err instanceof Error ? err.message : '打开文章失败');
+  }
 };
 
-/**
- * 处理标题回车
- */
-const handleTitleEnter = (): void => {
-  syncTitleToArticle();
-  focusEditor();
-};
-
 // ============================================
-// AI 功能
+// AI配置和公众号定位
 // ============================================
-const handleAIApply = (result: string) => {
-  console.log('AI 结果:', result);
-  showAIMenu.value = false;
-};
-
-// ============================================
-// AI配置
-// ============================================
-const loadAIConfig = async () => {
+const loadAIConfig = async (): Promise<void> => {
   try {
     const config = await wails.getAIConfig();
     aiConfig.value = config;
@@ -381,7 +418,16 @@ const loadAIConfig = async () => {
   }
 };
 
-const handleSettingsSave = async (config: AIConfig) => {
+const loadPositioning = async (): Promise<void> => {
+  try {
+    const positioning = await wails.getPositioning();
+    savedPositioning.value = positioning;
+  } catch (err) {
+    console.error('加载公众号定位失败:', err);
+  }
+};
+
+const handleSettingsSave = async (config: AIConfig): Promise<void> => {
   try {
     await wails.saveAIConfig(config);
     aiConfig.value = config;
@@ -392,32 +438,44 @@ const handleSettingsSave = async (config: AIConfig) => {
   }
 };
 
+const handlePositioningSave = async (positioning: string): Promise<void> => {
+  try {
+    await wails.savePositioning(positioning);
+    savedPositioning.value = positioning;
+    console.log('公众号定位已保存');
+  } catch (err) {
+    console.error('保存公众号定位失败:', err);
+    handleError(err instanceof Error ? err.message : '保存公众号定位失败');
+  }
+};
+
 // ============================================
 // 工具函数
 // ============================================
-const handleError = (message: string) => {
-  console.error('错误:', message);
-};
-
-const formatFileName = (filePath: string): string => {
-  if (!filePath) return '未命名';
-  const parts = filePath.split(/[/\\]/);
-  return parts[parts.length - 1] || filePath;
+const handleError = (message: string): void => {
+  errorMessage.value = message;
+  setTimeout(() => {
+    errorMessage.value = '';
+  }, 5000);
 };
 
 // ============================================
 // 键盘快捷键
 // ============================================
-const handleKeyDown = (e: KeyboardEvent) => {
+const handleKeyDown = (e: KeyboardEvent): void => {
   if ((e.ctrlKey || e.metaKey) && e.key === ',') {
     e.preventDefault();
     showSettings.value = true;
   }
 };
 
+// ============================================
+// 生命周期
+// ============================================
 onMounted(() => {
   document.addEventListener('keydown', handleKeyDown);
   loadAIConfig();
+  loadPositioning();
 });
 
 onUnmounted(() => {
@@ -430,9 +488,9 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  font-family: var(--font-family-base);
-  background: var(--bg-component);
-  color: var(--text-primary);
+  font-family: var(--font-family-base, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  background: var(--bg-component, #fff);
+  color: var(--text-primary, #262626);
 }
 
 /* 主体区域 */
@@ -444,11 +502,12 @@ onUnmounted(() => {
 
 /* 侧边栏 */
 .sidebar {
-  width: 280px;
+  width: 300px;
   flex-shrink: 0;
-  border-right: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color, #e8e8e8);
   transition: width 0.3s;
   overflow: hidden;
+  background: var(--panel-bg, #fafafa);
 }
 
 .sidebar.collapsed {
@@ -460,20 +519,7 @@ onUnmounted(() => {
 .editor-container {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  min-width: 0;
   overflow: hidden;
-}
-
-/* 编辑器布局 */
-.editor-layout {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
-
-.editor-layout.preview-only .editor-pane {
-  display: none;
 }
 
 /* 编辑和预览面板 */
@@ -487,11 +533,7 @@ onUnmounted(() => {
 }
 
 .editor-pane {
-  border-right: 1px solid var(--border-color);
-}
-
-.preview-pane.expanded {
-  flex: 1;
+  border-right: 1px solid var(--border-color, #e8e8e8);
 }
 
 /* 面板头部 */
@@ -499,40 +541,48 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--bg-hover);
-  border-bottom: 1px solid var(--border-color);
-  font-size: 12px;
+  padding: 10px 16px;
+  background: var(--bg-hover, #f5f5f5);
+  border-bottom: 1px solid var(--border-color, #e8e8e8);
+  font-size: 13px;
 }
 
 .pane-title {
-  font-weight: 500;
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--text-primary, #262626);
+}
+
+.pane-subtitle {
+  font-size: 12px;
+  color: var(--text-secondary, #8c8c8c);
+  margin-left: 8px;
 }
 
 .pane-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
 }
 
 .pane-btn {
-  padding: 2px 8px;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  background: transparent;
+  padding: 4px 10px;
+  border: 1px solid var(--border-color, #d9d9d9);
+  border-radius: 4px;
+  background: var(--bg-component, #fff);
   cursor: pointer;
-  font-size: 11px;
-  color: var(--text-secondary);
+  font-size: 12px;
+  color: var(--text-secondary, #595959);
+  transition: all 0.2s;
 }
 
 .pane-btn:hover {
-  background: var(--bg-component);
+  border-color: var(--color-primary, #1890ff);
+  color: var(--color-primary, #1890ff);
 }
 
 .pane-btn.active {
-  background: var(--bg-active);
-  color: var(--color-primary);
-  border-color: var(--color-primary);
+  background: var(--color-primary, #1890ff);
+  border-color: var(--color-primary, #1890ff);
+  color: white;
 }
 
 /* 编辑区域 */
@@ -548,12 +598,17 @@ onUnmounted(() => {
   border: none;
   outline: none;
   resize: none;
-  font-family: var(--font-family-mono);
+  font-family: var(--font-family-mono, 'SF Mono', Monaco, 'Cascadia Code', monospace);
   font-size: 14px;
   line-height: 1.8;
-  background: var(--bg-component);
-  color: var(--text-primary);
+  background: var(--bg-component, #fff);
+  color: var(--text-primary, #262626);
   tab-size: 2;
+  box-sizing: border-box;
+}
+
+.markdown-editor::placeholder {
+  color: var(--text-muted, #bfbfbf);
 }
 
 /* 预览区域 */
@@ -561,81 +616,46 @@ onUnmounted(() => {
   flex: 1;
   overflow: auto;
   padding: 20px;
-  background: var(--bg-component);
+  background: var(--bg-component, #fff);
 }
 
 .markdown-body {
   max-width: 800px;
   margin: 0 auto;
+  font-size: 15px;
+  line-height: 1.8;
 }
 
-/* 标题编辑区 */
-.title-editor {
-  padding: 12px 20px 8px;
-  background: var(--bg-component);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.title-input-wrapper {
+/* 全局 Loading 遮罩 */
+.global-loading {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  z-index: 2000;
 }
 
-.title-input {
-  flex: 1;
-  padding: 8px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  background: var(--bg-component);
-  color: var(--text-primary);
-  font-size: 16px;
-  font-weight: 500;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.title-input:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
-}
-
-.title-input::placeholder {
-  color: var(--text-secondary);
-}
-
-.generate-outline-btn {
-  padding: 8px 16px;
-  border: 1px solid var(--color-primary);
-  border-radius: 4px;
-  background: var(--color-primary);
-  color: white;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-
-.generate-outline-btn:hover:not(:disabled) {
-  background: var(--color-primary-hover);
-  border-color: var(--color-primary-hover);
-}
-
-.generate-outline-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.loading-spinner-small {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+.loading-spinner-large {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(255, 255, 255, 0.3);
   border-top-color: white;
   border-radius: 50%;
   animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  margin-top: 20px;
+  font-size: 16px;
+  color: white;
+  font-weight: 500;
 }
 
 @keyframes spin {
@@ -644,42 +664,49 @@ onUnmounted(() => {
   }
 }
 
-/* 状态栏 */
-.status-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 16px;
-  background: var(--bg-hover);
-  border-top: 1px solid var(--border-color);
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.status-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.status-item.dirty {
-  color: var(--color-warning);
-}
-
-.status-separator {
-  color: var(--border-color);
-}
-
-.status-btn {
-  padding: 2px 8px;
-  border: none;
-  background: transparent;
+/* 错误提示 */
+.error-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 24px;
+  background: var(--error-bg, #fff2f0);
+  border: 1px solid var(--error-border, #ffccc7);
+  border-radius: 6px;
+  color: var(--error-color, #ff4d4f);
+  font-size: 13px;
+  z-index: 1000;
   cursor: pointer;
-  font-size: 11px;
-  color: var(--text-secondary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.status-btn:hover {
-  color: var(--color-primary);
+/* 过渡动画 */
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.3s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(20px);
+}
+
+/* 暗色主题适配 */
+@media (prefers-color-scheme: dark) {
+  .app {
+    --bg-component: #1f1f1f;
+    --bg-hover: #2c2c2c;
+    --panel-bg: #141414;
+    --text-primary: #d9d9d9;
+    --text-secondary: #8c8c8c;
+    --text-muted: #595959;
+    --border-color: #434343;
+    --color-primary: #1890ff;
+    --error-bg: #2a1215;
+    --error-border: #58181c;
+    --error-color: #ff7875;
+  }
 }
 </style>

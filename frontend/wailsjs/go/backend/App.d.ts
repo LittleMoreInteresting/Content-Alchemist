@@ -12,13 +12,17 @@ export function DeleteArticle(arg1:string):Promise<void>;
 
 export function DeleteArticleAndFile(arg1:string):Promise<void>;
 
-export function GenerateOutline(arg1:string):Promise<string>;
+export function GenerateArticle(arg1:string,arg2:string,arg3:string):Promise<string>;
+
+export function GenerateOutline(arg1:string,arg2:string,arg3:string):Promise<models.GenerateOutlineResult>;
 
 export function GetAIConfig():Promise<models.AIConfig>;
 
 export function GetArticleByUUID(arg1:string):Promise<models.Article>;
 
 export function GetFileInfo(arg1:string):Promise<Record<string, any>>;
+
+export function GetPositioning():Promise<string>;
 
 export function GetRecentArticles(arg1:number):Promise<Array<models.Article>>;
 
@@ -36,6 +40,10 @@ export function SaveArticle(arg1:string,arg2:string):Promise<void>;
 
 export function SaveArticleAs(arg1:string,arg2:string,arg3:string):Promise<models.Article>;
 
+export function SaveArticleWithSmartNaming(arg1:string,arg2:string,arg3:string):Promise<models.Article>;
+
 export function SaveFileDialog(arg1:string):Promise<string>;
+
+export function SavePositioning(arg1:string):Promise<void>;
 
 export function UpdateArticleMeta(arg1:string,arg2:Array<string>):Promise<void>;

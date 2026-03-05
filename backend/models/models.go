@@ -144,3 +144,9 @@ type ReadArticleResponse struct {
 	Article *Article `json:"article"`
 	Content string   `json:"content"`
 }
+
+// GenerateOutlineResult 生成大纲的结果
+type GenerateOutlineResult struct {
+	Titles  []string `json:"titles"`  // 3个候选爆款标题
+	Outline string   `json:"outline"` // 文章大纲
+}

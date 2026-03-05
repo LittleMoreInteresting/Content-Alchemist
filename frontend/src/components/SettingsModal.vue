@@ -53,6 +53,21 @@
             </div>
           </div>
         </div>
+
+        <!-- 公众号定位配置 -->
+        <div class="settings-section">
+          <h4 class="section-title">公众号定位</h4>
+          <div class="form-group">
+            <label>定位描述</label>
+            <textarea
+              v-model="positioningConfig"
+              placeholder="例如：&#10;- 科技类公众号&#10;- 面向25-35岁职场人群&#10;- 专业但有温度&#10;&#10;这个配置会在生成大纲和文章时自动使用"
+              class="form-textarea"
+              rows="5"
+            ></textarea>
+            <p class="form-hint">保存后，生成大纲和文章时会自动应用此定位</p>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn-secondary" @click="handleClose">关闭</button>
@@ -63,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue';
+import { reactive, ref, watch } from 'vue';
 
 export interface AIConfig {
   baseUrl: string;
@@ -75,6 +90,7 @@ export interface AIConfig {
 interface Props {
   visible: boolean;
   initialConfig?: AIConfig;
+  initialPositioning?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -83,12 +99,14 @@ const props = withDefaults(defineProps<Props>(), {
     token: '',
     temperature: 0.7,
     model: 'deepseek-chat'
-  })
+  }),
+  initialPositioning: ''
 });
 
 const emit = defineEmits<{
   (e: 'update:visible', value: boolean): void;
   (e: 'save', config: AIConfig): void;
+  (e: 'save-positioning', positioning: string): void;
 }>();
 
 const aiConfig = reactive<AIConfig>({
@@ -97,6 +115,8 @@ const aiConfig = reactive<AIConfig>({
   temperature: props.initialConfig.temperature,
   model: props.initialConfig.model
 });
+
+const positioningConfig = ref(props.initialPositioning);
 
 // 当外部配置变化时更新
 watch(() => props.initialConfig, (newConfig) => {
@@ -108,12 +128,20 @@ watch(() => props.initialConfig, (newConfig) => {
   }
 }, { deep: true });
 
+// 当外部定位配置变化时更新
+watch(() => props.initialPositioning, (newValue) => {
+  positioningConfig.value = newValue;
+});
+
 const handleClose = () => {
   emit('update:visible', false);
 };
 
 const handleSave = () => {
+  // 保存 AI 配置
   emit('save', { ...aiConfig });
+  // 保存公众号定位
+  emit('save-positioning', positioningConfig.value);
   handleClose();
 };
 </script>
@@ -137,10 +165,14 @@ const handleSave = () => {
   border-radius: 8px;
   width: 500px;
   max-width: 90vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .modal-header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -161,11 +193,19 @@ const handleSave = () => {
   cursor: pointer;
   font-size: 14px;
   color: var(--text-secondary, #8c8c8c);
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: var(--bg-hover, #f5f5f5);
+  color: var(--text-primary, #262626);
 }
 
 .modal-body {
   padding: 20px;
-  min-height: 100px;
+  overflow-y: auto;
+  flex: 1;
 }
 
 .modal-footer {
@@ -183,11 +223,17 @@ const handleSave = () => {
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
+  transition: all 0.2s;
 }
 
 .btn-secondary {
   background: var(--bg-component, #fff);
   color: var(--text-primary, #262626);
+}
+
+.btn-secondary:hover {
+  border-color: var(--color-primary, #1890ff);
+  color: var(--color-primary, #1890ff);
 }
 
 .btn-primary {
@@ -196,9 +242,18 @@ const handleSave = () => {
   color: white;
 }
 
+.btn-primary:hover {
+  background: var(--color-primary-hover, #40a9ff);
+  border-color: var(--color-primary-hover, #40a9ff);
+}
+
 /* 设置分区 */
 .settings-section {
   margin-bottom: 24px;
+}
+
+.settings-section:last-child {
+  margin-bottom: 0;
 }
 
 .section-title {
@@ -215,6 +270,10 @@ const handleSave = () => {
   margin-bottom: 16px;
 }
 
+.form-group:last-child {
+  margin-bottom: 0;
+}
+
 .form-group label {
   display: block;
   margin-bottom: 6px;
@@ -222,7 +281,8 @@ const handleSave = () => {
   color: var(--text-secondary, #595959);
 }
 
-.form-input {
+.form-input,
+.form-textarea {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border-color, #d9d9d9);
@@ -231,9 +291,17 @@ const handleSave = () => {
   background: var(--bg-component, #fff);
   color: var(--text-primary, #262626);
   box-sizing: border-box;
+  transition: all 0.2s;
 }
 
-.form-input:focus {
+.form-textarea {
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.form-input:focus,
+.form-textarea:focus {
   outline: none;
   border-color: var(--color-primary, #1890ff);
   box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
@@ -249,5 +317,25 @@ const handleSave = () => {
   justify-content: space-between;
   font-size: 11px;
   color: var(--text-secondary, #8c8c8c);
+}
+
+.form-hint {
+  margin: 6px 0 0 0;
+  font-size: 12px;
+  color: var(--text-muted, #8c8c8c);
+}
+
+/* 暗色主题适配 */
+@media (prefers-color-scheme: dark) {
+  .modal-content {
+    --bg-component: #1f1f1f;
+    --bg-hover: #2c2c2c;
+    --text-primary: #d9d9d9;
+    --text-secondary: #8c8c8c;
+    --text-muted: #595959;
+    --border-color: #434343;
+    --color-primary: #1890ff;
+    --color-primary-hover: #40a9ff;
+  }
 }
 </style>

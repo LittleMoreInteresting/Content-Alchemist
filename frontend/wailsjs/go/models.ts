@@ -69,6 +69,20 @@ export namespace models {
 		    return a;
 		}
 	}
+	export class GenerateOutlineResult {
+	    titles: string[];
+	    outline: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new GenerateOutlineResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.titles = source["titles"];
+	        this.outline = source["outline"];
+	    }
+	}
 	export class ReadArticleResponse {
 	    article?: Article;
 	    content: string;

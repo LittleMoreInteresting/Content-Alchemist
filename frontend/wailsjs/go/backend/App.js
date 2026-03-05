@@ -22,8 +22,12 @@ export function DeleteArticleAndFile(arg1) {
   return window['go']['backend']['App']['DeleteArticleAndFile'](arg1);
 }
 
-export function GenerateOutline(arg1) {
-  return window['go']['backend']['App']['GenerateOutline'](arg1);
+export function GenerateArticle(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GenerateArticle'](arg1, arg2, arg3);
+}
+
+export function GenerateOutline(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GenerateOutline'](arg1, arg2, arg3);
 }
 
 export function GetAIConfig() {
@@ -36,6 +40,10 @@ export function GetArticleByUUID(arg1) {
 
 export function GetFileInfo(arg1) {
   return window['go']['backend']['App']['GetFileInfo'](arg1);
+}
+
+export function GetPositioning() {
+  return window['go']['backend']['App']['GetPositioning']();
 }
 
 export function GetRecentArticles(arg1) {
@@ -70,8 +78,16 @@ export function SaveArticleAs(arg1, arg2, arg3) {
   return window['go']['backend']['App']['SaveArticleAs'](arg1, arg2, arg3);
 }
 
+export function SaveArticleWithSmartNaming(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['SaveArticleWithSmartNaming'](arg1, arg2, arg3);
+}
+
 export function SaveFileDialog(arg1) {
   return window['go']['backend']['App']['SaveFileDialog'](arg1);
+}
+
+export function SavePositioning(arg1) {
+  return window['go']['backend']['App']['SavePositioning'](arg1);
 }
 
 export function UpdateArticleMeta(arg1, arg2) {

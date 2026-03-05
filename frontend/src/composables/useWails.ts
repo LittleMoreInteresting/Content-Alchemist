@@ -10,6 +10,10 @@ import type { models } from '../../wailsjs/go/models';
 // 导出 Article 类型
 export type Article = models.Article;
 export type ReadArticleResponse = models.ReadArticleResponse;
+export type GenerateOutlineResult = {
+  titles: string[];
+  outline: string;
+};
 export type FileInfo = Record<string, any>;
 
 // AI配置类型
@@ -309,11 +313,57 @@ export function useWails() {
   };
 
   /**
-   * 根据标题生成大纲
+   * 根据标题生成大纲和候选标题
+   * 返回包含3个候选标题和大纲的结果
    */
-  const generateOutline = async (title: string): Promise<string> => {
+  const generateOutline = async (
+    title: string,
+    requirements?: string,
+    positioning?: string
+  ): Promise<{ titles: string[]; outline: string }> => {
     return wrapAsync(async () => {
-      return await App.GenerateOutline(title);
+      const result = await App.GenerateOutline(title, requirements || '', positioning || '');
+      return {
+        titles: result.titles || [],
+        outline: result.outline || '',
+      };
+    });
+  };
+
+  /**
+   * 根据大纲生成文章
+   */
+  const generateArticle = async (title: string, outline: string, requirements?: string): Promise<string> => {
+    return wrapAsync(async () => {
+      return await App.GenerateArticle(title, outline, requirements || '');
+    });
+  };
+
+  /**
+   * 智能保存文章
+   * 如果未保存到本地文件，则根据标题自动生成文件名
+   */
+  const saveArticleWithSmartNaming = async (uuid: string, title: string, content: string): Promise<Article | null> => {
+    return wrapAsync(async () => {
+      return await App.SaveArticleWithSmartNaming(uuid, title, content);
+    });
+  };
+
+  /**
+   * 获取公众号定位配置
+   */
+  const getPositioning = async (): Promise<string> => {
+    return wrapAsync(async () => {
+      return await App.GetPositioning();
+    });
+  };
+
+  /**
+   * 保存公众号定位配置
+   */
+  const savePositioning = async (positioning: string): Promise<void> => {
+    return wrapAsync(async () => {
+      await App.SavePositioning(positioning);
     });
   };
 
@@ -361,6 +411,14 @@ export function useWails() {
 
     // AI生成
     generateOutline,
+    generateArticle,
+
+    // 智能保存
+    saveArticleWithSmartNaming,
+
+    // 公众号定位配置
+    getPositioning,
+    savePositioning,
 
     // 工具
     clearError,

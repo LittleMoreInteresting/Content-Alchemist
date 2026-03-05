@@ -137,6 +137,12 @@ func (fm *FileManager) CheckFileExists(filePath string) (bool, error) {
 	return !info.IsDir(), nil
 }
 
+// CheckFileExistsSync 同步检查文件是否存在（无错误返回）
+func (fm *FileManager) CheckFileExistsSync(filePath string) bool {
+	exists, _ := fm.CheckFileExists(filePath)
+	return exists
+}
+
 // CheckFileModified 检查文件是否被外部修改
 // 返回：是否被修改, 修改时间, 错误
 func (fm *FileManager) CheckFileModified(filePath string, lastModified time.Time) (bool, time.Time, error) {

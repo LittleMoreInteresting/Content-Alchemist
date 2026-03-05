@@ -720,6 +720,33 @@ func (a *App) SaveAIConfig(config *models.AIConfig) error {
 	return nil
 }
 
+// GetPositioning 获取公众号定位配置
+func (a *App) GetPositioning() (string, error) {
+	if a.db == nil {
+		return "", fmt.Errorf("数据库未初始化")
+	}
+
+	positioning, err := a.db.GetSetting("positioning")
+	if err != nil {
+		return "", fmt.Errorf("获取公众号定位失败: %w", err)
+	}
+
+	return positioning, nil
+}
+
+// SavePositioning 保存公众号定位配置
+func (a *App) SavePositioning(positioning string) error {
+	if a.db == nil {
+		return fmt.Errorf("数据库未初始化")
+	}
+
+	if err := a.db.SetSetting("positioning", positioning); err != nil {
+		return fmt.Errorf("保存公众号定位失败: %w", err)
+	}
+
+	return nil
+}
+
 // ============================================
 // AI 服务相关
 // ============================================
@@ -734,12 +761,39 @@ func (a *App) initAIService() {
 	a.aiService = ai.NewService(config)
 }
 
-// GenerateOutline 根据标题生成大纲
+// GenerateOutline 根据标题、写作要求和公众号定位生成大纲和候选标题
 // title: 文章标题
-// 返回: 生成的大纲内容
-func (a *App) GenerateOutline(title string) (string, error) {
+// requirements: 写作要求
+// positioning: 公众号定位
+// 返回: 包含3个候选标题和大纲的结果
+func (a *App) GenerateOutline(title string, requirements string, positioning string) (*models.GenerateOutlineResult, error) {
 	if a.aiService == nil {
 		// 重新初始化 AI 服务
+		a.initAIService()
+	}
+
+	if title == "" {
+		return nil, fmt.Errorf("标题不能为空")
+	}
+
+	result, err := a.aiService.GenerateOutlineWithTitles(title, requirements, positioning)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.GenerateOutlineResult{
+		Titles:  result.Titles,
+		Outline: result.Outline,
+	}, nil
+}
+
+// GenerateArticle 根据大纲生成文章
+// title: 文章标题
+// outline: 文章大纲
+// requirements: 写作要求
+// 返回: 生成的文章内容
+func (a *App) GenerateArticle(title string, outline string, requirements string) (string, error) {
+	if a.aiService == nil {
 		a.initAIService()
 	}
 
@@ -747,10 +801,93 @@ func (a *App) GenerateOutline(title string) (string, error) {
 		return "", fmt.Errorf("标题不能为空")
 	}
 
-	outline, err := a.aiService.GenerateOutlineByTitle(title)
+	if outline == "" {
+		return "", fmt.Errorf("大纲不能为空，请先生成大纲")
+	}
+
+	article, err := a.aiService.GenerateArticleFromOutline(title, outline, requirements)
 	if err != nil {
 		return "", err
 	}
 
-	return outline, nil
+	return article, nil
+}
+
+// SaveArticleWithSmartNaming 智能保存文章
+// 如果文章未保存到本地文件，则根据标题自动生成文件名并弹出保存对话框
+// 如果已保存，则直接保存
+func (a *App) SaveArticleWithSmartNaming(uuid string, title string, content string) (*models.Article, error) {
+	if a.db == nil {
+		return nil, fmt.Errorf("数据库未初始化")
+	}
+
+	// 获取文章记录
+	article, err := a.db.GetArticleByUUID(uuid)
+	if err != nil {
+		return nil, fmt.Errorf("查询文章失败: %w", err)
+	}
+
+	// 如果文章不存在，或者文件路径为空，或者是临时文件，需要选择保存位置
+	needsNewFile := article == nil || article.FilePath == "" || !a.fileMgr.CheckFileExistsSync(article.FilePath)
+
+	if needsNewFile {
+		// 根据标题生成文件名
+		filename := a.fileMgr.SanitizeFilename(title)
+		if filename == "" {
+			filename = "untitled"
+		}
+		filename += ".md"
+
+		// 打开保存对话框
+		filePath, err := a.SaveFileDialog(filename)
+		if err != nil {
+			return nil, err
+		}
+		if filePath == "" {
+			// 用户取消
+			return nil, nil
+		}
+
+		// 保存到新文件
+		if article == nil {
+			// 创建新文章
+			article = a.fileMgr.CreateNewArticleData(filePath, content)
+			article.Title = title
+			if err := a.fileMgr.WriteFileContent(filePath, content); err != nil {
+				return nil, err
+			}
+			if err := a.db.CreateArticle(article); err != nil {
+				return nil, fmt.Errorf("创建文章记录失败: %w", err)
+			}
+		} else {
+			// 更新现有文章
+			article.FilePath = filePath
+			article.Title = title
+			a.fileMgr.UpdateArticleFromContent(article, content)
+			if err := a.fileMgr.WriteFileContent(filePath, content); err != nil {
+				return nil, err
+			}
+			if err := a.db.UpdateArticle(article); err != nil {
+				return nil, fmt.Errorf("更新文章记录失败: %w", err)
+			}
+		}
+
+		return article, nil
+	}
+
+	// 文章已存在，直接保存
+	if err := a.SaveArticle(uuid, content); err != nil {
+		return nil, err
+	}
+
+	// 更新标题
+	if article.Title != title {
+		article.Title = title
+		a.fileMgr.UpdateArticleFromContent(article, content)
+		if err := a.db.UpdateArticle(article); err != nil {
+			return nil, fmt.Errorf("更新文章标题失败: %w", err)
+		}
+	}
+
+	return article, nil
 }
