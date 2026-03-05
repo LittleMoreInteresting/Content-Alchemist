@@ -30,6 +30,7 @@ export type FileErrorCode =
   | 'IS_DIRECTORY'
   | 'FILE_TOO_LARGE'
   | 'FILE_EXISTS'
+  | 'FILE_EXISTS_CONFIRM'
   | 'FILE_MODIFIED_EXTERNALLY'
   | 'ARTICLE_NOT_FOUND'
   | 'UNKNOWN_ERROR';
@@ -59,6 +60,9 @@ const wrapError = (error: unknown): FileError => {
   }
   if (message.includes('PERMISSION_DENIED')) {
     return new FileError('PERMISSION_DENIED', '无权限访问文件');
+  }
+  if (message.includes('FILE_EXISTS_CONFIRM')) {
+    return new FileError('FILE_EXISTS_CONFIRM', message);
   }
   if (message.includes('FILE_EXISTS')) {
     return new FileError('FILE_EXISTS', '文件已存在');
@@ -99,40 +103,6 @@ export function useWails() {
     } finally {
       isLoading.value = false;
     }
-  };
-
-  // ============================================
-  // 文件对话框操作
-  // ============================================
-
-  /**
-   * 打开文件选择对话框
-   */
-  const openFileDialog = async (): Promise<string> => {
-    return wrapAsync(async () => {
-      const result = await App.OpenFileDialog();
-      return result || '';
-    });
-  };
-
-  /**
-   * 打开保存文件对话框
-   */
-  const saveFileDialog = async (defaultFilename = ''): Promise<string> => {
-    return wrapAsync(async () => {
-      const result = await App.SaveFileDialog(defaultFilename);
-      return result || '';
-    });
-  };
-
-  /**
-   * 打开目录选择对话框
-   */
-  const openDirectoryDialog = async (): Promise<string> => {
-    return wrapAsync(async () => {
-      const result = await App.OpenDirectoryDialog();
-      return result || '';
-    });
   };
 
   // ============================================
@@ -189,18 +159,6 @@ export function useWails() {
     });
   };
 
-  /**
-   * 创建新文章并指定初始内容
-   */
-  const createNewArticleWithContent = async (
-    defaultFilename: string,
-    content: string
-  ): Promise<Article | null> => {
-    return wrapAsync(async () => {
-      return await App.CreateNewArticleWithContent(defaultFilename, content);
-    });
-  };
-
   // ============================================
   // 文章元数据操作
   // ============================================
@@ -216,77 +174,11 @@ export function useWails() {
   };
 
   /**
-   * 更新文章元数据
-   */
-  const updateArticleMeta = async (
-    uuid: string,
-    tags: string[]
-  ): Promise<void> => {
-    return wrapAsync(async () => {
-      await App.UpdateArticleMeta(uuid, tags);
-    });
-  };
-
-  /**
-   * 根据UUID获取文章
-   */
-  const getArticleByUUID = async (uuid: string): Promise<Article> => {
-    return wrapAsync(async () => {
-      return await App.GetArticleByUUID(uuid);
-    });
-  };
-
-  /**
    * 删除文章记录（不删除文件）
    */
   const deleteArticle = async (uuid: string): Promise<void> => {
     return wrapAsync(async () => {
       await App.DeleteArticle(uuid);
-    });
-  };
-
-  /**
-   * 删除文章记录和文件
-   */
-  const deleteArticleAndFile = async (uuid: string): Promise<void> => {
-    return wrapAsync(async () => {
-      await App.DeleteArticleAndFile(uuid);
-    });
-  };
-
-  /**
-   * 根据标题重命名文章文件
-   * 返回新的文件路径
-   */
-  const renameArticleByTitle = async (
-    uuid: string,
-    newTitle: string,
-    content: string
-  ): Promise<string> => {
-    return wrapAsync(async () => {
-      return await App.RenameArticleByTitle(uuid, newTitle, content);
-    });
-  };
-
-  // ============================================
-  // 文件系统操作
-  // ============================================
-
-  /**
-   * 检查文件是否存在
-   */
-  const checkFileExists = async (filePath: string): Promise<boolean> => {
-    return wrapAsync(async () => {
-      return await App.CheckFileExists(filePath);
-    });
-  };
-
-  /**
-   * 获取文件信息
-   */
-  const getFileInfo = async (filePath: string): Promise<FileInfo> => {
-    return wrapAsync(async () => {
-      return await App.GetFileInfo(filePath);
     });
   };
 
@@ -342,10 +234,16 @@ export function useWails() {
   /**
    * 智能保存文章
    * 如果未保存到本地文件，则根据标题自动生成文件名
+   * overwrite: 是否强制覆盖已存在的文件
    */
-  const saveArticleWithSmartNaming = async (uuid: string, title: string, content: string): Promise<Article | null> => {
+  const saveArticleWithSmartNaming = async (
+    uuid: string,
+    title: string,
+    content: string,
+    overwrite = false
+  ): Promise<Article | null> => {
     return wrapAsync(async () => {
-      return await App.SaveArticleWithSmartNaming(uuid, title, content);
+      return await App.SaveArticleWithSmartNaming(uuid, title, content, overwrite);
     });
   };
 
@@ -379,31 +277,15 @@ export function useWails() {
     isLoading,
     error,
 
-    // 文件对话框
-    openFileDialog,
-    saveFileDialog,
-    openDirectoryDialog,
-
     // 文件操作
     readArticle,
     saveArticle,
     saveArticleAs,
     createNewArticle,
-    createNewArticleWithContent,
 
     // 文章元数据
     getRecentArticles,
-    updateArticleMeta,
-    getArticleByUUID,
     deleteArticle,
-    deleteArticleAndFile,
-
-    // 文件系统
-    checkFileExists,
-    getFileInfo,
-
-    // 标题重命名
-    renameArticleByTitle,
 
     // AI配置
     getAIConfig,

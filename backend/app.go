@@ -66,54 +66,6 @@ func (a *App) Shutdown(ctx context.Context) {
 // Wails绑定方法 - 文件对话框
 // ============================================
 
-// OpenFileDialog 打开文件选择对话框
-// 返回: 选中的文件路径，如果用户取消则返回空字符串
-func (a *App) OpenFileDialog() (string, error) {
-	if a.ctx == nil {
-		return "", fmt.Errorf("应用未初始化")
-	}
-
-	// 获取默认目录
-	defaultDir, err := a.fileMgr.GetDefaultSaveDirectory()
-	if err != nil {
-		defaultDir = "."
-	}
-
-	// 打开文件对话框
-	selection, err := runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:            "打开 Markdown 文件",
-		DefaultDirectory: defaultDir,
-		Filters: []runtime.FileFilter{
-			{
-				DisplayName: "Markdown 文件",
-				Pattern:     "*.md;*.markdown;*.mdown",
-			},
-			{
-				DisplayName: "所有文件",
-				Pattern:     "*",
-			},
-		},
-		ShowHiddenFiles: false,
-	})
-
-	if err != nil {
-		return "", fmt.Errorf("打开对话框失败: %w", err)
-	}
-
-	// 用户取消
-	if selection == "" {
-		return "", nil
-	}
-
-	// 转换为绝对路径
-	absPath, err := filepath.Abs(selection)
-	if err != nil {
-		return "", fmt.Errorf("无法获取绝对路径: %w", err)
-	}
-
-	return absPath, nil
-}
-
 // SaveFileDialog 打开保存文件对话框
 // 返回: 选中的文件路径，如果用户取消则返回空字符串
 func (a *App) SaveFileDialog(defaultFilename string) (string, error) {
@@ -172,39 +124,6 @@ func (a *App) SaveFileDialog(defaultFilename string) (string, error) {
 
 	if filepath.Ext(absPath) == "" {
 		absPath += ".md"
-	}
-
-	return absPath, nil
-}
-
-// OpenDirectoryDialog 打开目录选择对话框
-// 返回: 选中的目录路径，如果用户取消则返回空字符串
-func (a *App) OpenDirectoryDialog() (string, error) {
-	if a.ctx == nil {
-		return "", fmt.Errorf("应用未初始化")
-	}
-
-	defaultDir, err := a.fileMgr.GetDefaultSaveDirectory()
-	if err != nil {
-		defaultDir = "."
-	}
-
-	selection, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		Title:            "选择文件夹",
-		DefaultDirectory: defaultDir,
-	})
-
-	if err != nil {
-		return "", fmt.Errorf("打开目录对话框失败: %w", err)
-	}
-
-	if selection == "" {
-		return "", nil
-	}
-
-	absPath, err := filepath.Abs(selection)
-	if err != nil {
-		return "", fmt.Errorf("无法获取绝对路径: %w", err)
 	}
 
 	return absPath, nil
@@ -410,60 +329,6 @@ func (a *App) CreateNewArticle() (*models.Article, error) {
 	return article, nil
 }
 
-// CreateNewArticleWithContent 创建新文章并指定初始内容
-func (a *App) CreateNewArticleWithContent(defaultFilename string, content string) (*models.Article, error) {
-	if a.db == nil {
-		return nil, fmt.Errorf("数据库未初始化")
-	}
-
-	// 打开保存对话框
-	filePath, err := a.SaveFileDialog(defaultFilename)
-	if err != nil {
-		return nil, err
-	}
-
-	if filePath == "" {
-		return nil, nil
-	}
-
-	// 如果文件已存在，检查是否关联同一文章
-	exists, err := a.fileMgr.CheckFileExists(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("检查文件失败: %w", err)
-	}
-
-	if exists {
-		existingArticle, err := a.db.GetArticleByPath(filePath)
-		if err != nil {
-			return nil, fmt.Errorf("查询数据库失败: %w", err)
-		}
-
-		if existingArticle != nil {
-			// 更新现有文章
-			a.fileMgr.UpdateArticleFromContent(existingArticle, content)
-			if err := a.fileMgr.WriteFileContent(filePath, content); err != nil {
-				return nil, err
-			}
-			if err := a.db.UpdateArticle(existingArticle); err != nil {
-				return nil, fmt.Errorf("更新文章记录失败: %w", err)
-			}
-			return existingArticle, nil
-		}
-	}
-
-	// 创建新文件和记录
-	if err := a.fileMgr.WriteFileContent(filePath, content); err != nil {
-		return nil, err
-	}
-
-	article := a.fileMgr.CreateNewArticleData(filePath, content)
-	if err := a.db.CreateArticle(article); err != nil {
-		return nil, fmt.Errorf("创建文章记录失败: %w", err)
-	}
-
-	return article, nil
-}
-
 // ============================================
 // Wails绑定方法 - 文章元数据
 // ============================================
@@ -484,29 +349,7 @@ func (a *App) GetRecentArticles(limit int) ([]*models.Article, error) {
 	return a.db.GetRecentArticles(limit)
 }
 
-// UpdateArticleMeta 更新文章元数据（不触碰文件内容）
-func (a *App) UpdateArticleMeta(uuid string, tags []string) error {
-	if a.db == nil {
-		return fmt.Errorf("数据库未初始化")
-	}
-
-	article, err := a.db.GetArticleByUUID(uuid)
-	if err != nil {
-		return fmt.Errorf("查询文章失败: %w", err)
-	}
-
-	if article == nil {
-		return models.FileError{
-			Code:    "ARTICLE_NOT_FOUND",
-			Message: fmt.Sprintf("未找到UUID对应的文章: %s", uuid),
-		}
-	}
-
-	article.Tags = tags
-	return a.db.UpdateArticle(article)
-}
-
-// GetArticleByUUID 根据UUID获取文章元数据
+// GetArticleByUUID 根据UUID获取文章元数据（内部使用，非Wails绑定）
 func (a *App) GetArticleByUUID(uuid string) (*models.Article, error) {
 	if a.db == nil {
 		return nil, fmt.Errorf("数据库未初始化")
@@ -534,121 +377,6 @@ func (a *App) DeleteArticle(uuid string) error {
 	}
 
 	return a.db.DeleteArticle(uuid)
-}
-
-// DeleteArticleAndFile 删除文章记录和文件
-func (a *App) DeleteArticleAndFile(uuid string) error {
-	if a.db == nil {
-		return fmt.Errorf("数据库未初始化")
-	}
-
-	article, err := a.db.GetArticleByUUID(uuid)
-	if err != nil {
-		return fmt.Errorf("查询文章失败: %w", err)
-	}
-
-	if article == nil {
-		return models.FileError{
-			Code:    "ARTICLE_NOT_FOUND",
-			Message: fmt.Sprintf("未找到UUID对应的文章: %s", uuid),
-		}
-	}
-
-	// 删除文件
-	if err := os.Remove(article.FilePath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("删除文件失败: %w", err)
-	}
-
-	// 删除数据库记录
-	return a.db.DeleteArticle(uuid)
-}
-
-// CheckFileExists 检查文件是否存在
-func (a *App) CheckFileExists(filePath string) (bool, error) {
-	return a.fileMgr.CheckFileExists(filePath)
-}
-
-// RenameArticleByTitle 根据新标题重命名文章文件
-// 返回新的文件路径
-func (a *App) RenameArticleByTitle(uuid string, newTitle string, content string) (string, error) {
-	if a.db == nil {
-		return "", fmt.Errorf("数据库未初始化")
-	}
-
-	// 获取文章记录
-	article, err := a.db.GetArticleByUUID(uuid)
-	if err != nil {
-		return "", fmt.Errorf("查询文章失败: %w", err)
-	}
-
-	if article == nil {
-		return "", models.FileError{
-			Code:    "ARTICLE_NOT_FOUND",
-			Message: fmt.Sprintf("未找到UUID对应的文章: %s", uuid),
-		}
-	}
-
-	// 清理标题，作为文件名
-	newFilename := a.fileMgr.SanitizeFilename(newTitle)
-	if newFilename == "" {
-		newFilename = "untitled"
-	}
-
-	// 获取原文件所在目录
-	oldDir := filepath.Dir(article.FilePath)
-
-	// 生成新的文件路径
-	newPath := a.fileMgr.GenerateUniqueFilename(oldDir, newFilename)
-
-	// 如果是不同路径，执行文件重命名操作
-	if filepath.Clean(newPath) != filepath.Clean(article.FilePath) {
-		// 写入新文件
-		if err := a.fileMgr.WriteFileContent(newPath, content); err != nil {
-			return "", err
-		}
-
-		// 删除旧文件
-		if err := os.Remove(article.FilePath); err != nil && !os.IsNotExist(err) {
-			// 删除新文件，回滚
-			os.Remove(newPath)
-			return "", fmt.Errorf("删除旧文件失败: %w", err)
-		}
-
-		// 更新文件路径
-		article.FilePath = newPath
-	}
-
-	// 更新标题和元数据
-	article.Title = newTitle
-	a.fileMgr.UpdateArticleFromContent(article, content)
-	if err := a.db.UpdateArticle(article); err != nil {
-		return "", fmt.Errorf("更新文章记录失败: %w", err)
-	}
-
-	return article.FilePath, nil
-}
-
-// GetFileInfo 获取文件信息
-func (a *App) GetFileInfo(filePath string) (map[string]interface{}, error) {
-	filePath = filepath.Clean(filePath)
-
-	info, err := os.Stat(filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return map[string]interface{}{
-				"exists": false,
-			}, nil
-		}
-		return nil, err
-	}
-
-	return map[string]interface{}{
-		"exists":  true,
-		"isDir":   info.IsDir(),
-		"size":    info.Size(),
-		"modTime": info.ModTime().Unix(),
-		"path":    filePath,
-	}, nil
 }
 
 // ============================================
@@ -816,7 +544,8 @@ func (a *App) GenerateArticle(title string, outline string, requirements string)
 // SaveArticleWithSmartNaming 智能保存文章
 // 如果文章未保存到本地文件，则根据标题自动生成文件名并弹出保存对话框
 // 如果已保存，则直接保存
-func (a *App) SaveArticleWithSmartNaming(uuid string, title string, content string) (*models.Article, error) {
+// overwrite: 是否强制覆盖已存在的文件
+func (a *App) SaveArticleWithSmartNaming(uuid string, title string, content string, overwrite bool) (*models.Article, error) {
 	if a.db == nil {
 		return nil, fmt.Errorf("数据库未初始化")
 	}
@@ -846,6 +575,20 @@ func (a *App) SaveArticleWithSmartNaming(uuid string, title string, content stri
 		if filePath == "" {
 			// 用户取消
 			return nil, nil
+		}
+
+		// 检查文件是否已存在
+		exists, err := a.fileMgr.CheckFileExists(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("检查文件状态失败: %w", err)
+		}
+
+		// 如果文件存在且不强制覆盖，返回需要确认的错误
+		if exists && !overwrite {
+			return nil, models.FileError{
+				Code:    "FILE_EXISTS_CONFIRM",
+				Message: fmt.Sprintf("文件已存在: %s", filePath),
+			}
 		}
 
 		// 保存到新文件

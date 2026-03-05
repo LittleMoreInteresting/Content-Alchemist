@@ -112,7 +112,7 @@ import FileToolbar from './FileToolbar.vue';
 import WritingSidebar from './WritingSidebar.vue';
 import TitleSelectorModal from './TitleSelectorModal.vue';
 import SettingsModal, { type AIConfig } from './SettingsModal.vue';
-import { useWails } from '../composables/useWails';
+import { useWails, FileError } from '../composables/useWails';
 
 // ============================================
 // Markdown 渲染
@@ -205,8 +205,8 @@ const hideLoading = () => {
 // ============================================
 // 保存功能
 // ============================================
-const handleSave = async (): Promise<void> => {
-  if (!canSave.value) return;
+const handleSave = async (overwrite = false): Promise<void> => {
+  if (!canSave.value && !overwrite) return;
 
   isSaving.value = true;
 
@@ -214,7 +214,8 @@ const handleSave = async (): Promise<void> => {
     const result = await wails.saveArticleWithSmartNaming(
       currentUUID.value,
       articleTitle.value,
-      editorContent.value
+      editorContent.value,
+      overwrite
     );
 
     if (result) {
@@ -225,8 +226,26 @@ const handleSave = async (): Promise<void> => {
       sidebarRef.value?.loadRecentArticles();
     }
   } catch (err) {
-    console.error('保存失败:', err);
-    handleError(err instanceof Error ? err.message : '保存失败');
+    // 检查是否是文件存在需要确认的错误
+    if (err instanceof FileError && err.code === 'FILE_EXISTS_CONFIRM') {
+      // 提取文件路径
+      const filePathMatch = err.message.match(/文件已存在: (.+)$/);
+      const existingFilePath = filePathMatch ? filePathMatch[1] : '';
+      
+      // 显示确认对话框
+      const confirmed = window.confirm(
+        `文件 "${existingFilePath}" 已存在。\n\n是否覆盖保存？\n（旧版本将被替换）`
+      );
+      
+      if (confirmed) {
+        // 用户确认覆盖，重新调用保存并设置 overwrite 为 true
+        await handleSave(true);
+        return;
+      }
+    } else {
+      console.error('保存失败:', err);
+      handleError(err instanceof Error ? err.message : '保存失败');
+    }
   } finally {
     isSaving.value = false;
   }
@@ -297,7 +316,7 @@ const handleTitleSelected = async (selectedTitle: string): Promise<void> => {
 // ============================================
 // 自动保存
 // ============================================
-const autoSave = async (): Promise<void> => {
+const autoSave = async (overwrite = false): Promise<void> => {
   if (!articleTitle.value || !editorContent.value) return;
   
   isSaving.value = true;
@@ -306,7 +325,8 @@ const autoSave = async (): Promise<void> => {
     const result = await wails.saveArticleWithSmartNaming(
       currentUUID.value,
       articleTitle.value,
-      editorContent.value
+      editorContent.value,
+      overwrite
     );
 
     if (result) {
@@ -317,6 +337,12 @@ const autoSave = async (): Promise<void> => {
       sidebarRef.value?.loadRecentArticles();
     }
   } catch (err) {
+    // 自动保存时如果文件存在，自动覆盖（不打扰用户）
+    if (err instanceof FileError && err.code === 'FILE_EXISTS_CONFIRM') {
+      await autoSave(true);
+      return;
+    }
+    
     console.error('自动保存失败:', err);
     // 自动保存失败不提示错误，避免打扰用户
   } finally {
