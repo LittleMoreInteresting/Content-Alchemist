@@ -49,6 +49,12 @@
               spellcheck="false"
             ></textarea>
           </div>
+          <div class="editor-statusbar">
+            <span class="word-count">字数: {{ wordCount }}</span>
+            <span v-if="isDirty" class="save-status unsaved">未保存</span>
+            <span v-else-if="isSaving" class="save-status saving">保存中...</span>
+            <span v-else class="save-status saved">已保存</span>
+          </div>
         </div>
 
         <!-- 预览区域 -->
@@ -167,6 +173,19 @@ const aiConfig = ref<AIConfig>({
 // ============================================
 const canSave = computed(() => {
   return isDirty.value && !isSaving.value && articleTitle.value !== '';
+});
+
+// 字数统计
+const wordCount = computed(() => {
+  if (!editorContent.value) return 0;
+  // 中文字符 + 英文单词
+  const chinese = (editorContent.value.match(/[\u4e00-\u9fa5]/g) || []).length;
+  const english = editorContent.value
+    .replace(/[\u4e00-\u9fa5]/g, '')
+    .trim()
+    .split(/\s+/)
+    .filter(w => w.length > 0).length;
+  return chinese + english;
 });
 
 const renderedContent = computed(() => {
@@ -615,6 +634,38 @@ onUnmounted(() => {
 .editor-content {
   flex: 1;
   overflow: auto;
+}
+
+/* 编辑器状态栏 */
+.editor-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  background: var(--bg-hover, #f5f5f5);
+  border-top: 1px solid var(--border-color, #e8e8e8);
+  font-size: 12px;
+  color: var(--text-secondary, #8c8c8c);
+}
+
+.word-count {
+  font-weight: 500;
+}
+
+.save-status {
+  font-size: 11px;
+}
+
+.save-status.unsaved {
+  color: var(--color-warning, #faad14);
+}
+
+.save-status.saving {
+  color: var(--color-primary, #1890ff);
+}
+
+.save-status.saved {
+  color: var(--text-muted, #bfbfbf);
 }
 
 .markdown-editor {
