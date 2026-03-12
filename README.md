@@ -2,6 +2,7 @@
 
 一款现代化的智能写作工具，专为内容创作者设计。支持 AI 辅助写作、微信公众号排版美化、一键发布等功能。
 
+![wails](https://img.shields.io/badge/Wails-v2.11.0%20-blue)
 ![Vue3](https://img.shields.io/badge/Vue-3.x-4FC08D?style=flat-square&logo=vue.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript)
 ![Vite](https://img.shields.io/badge/Vite-5.x-646CFF?style=flat-square&logo=vite)
