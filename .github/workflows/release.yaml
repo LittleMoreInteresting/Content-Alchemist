@@ -71,6 +71,7 @@ jobs:
             build/bin/Content-Alchemist-Setup.exe
             build/bin/Content-Alchemist-arm64.exe
             build/bin/*.sha256
+            build/bin/Content-Alchemist-Debug.exe
           retention-days: 1
 
   # 构建 macOS 版本
