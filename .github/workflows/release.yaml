@@ -267,7 +267,7 @@ jobs:
 
   # 完成 Release
   finalize-release:
-    needs: [create-release, build-windows, build-macos, build-linux]
+    needs: [create-release, build-windows, build-macos]
     runs-on: ubuntu-latest
     if: always() && needs.create-release.result == 'success'
     steps:
