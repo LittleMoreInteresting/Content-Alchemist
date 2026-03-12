@@ -43,18 +43,16 @@ jobs:
 
       - name: Build Windows AMD64
         run: |
-          wails build -platform windows/amd64 -webview2 embed -ldflags "-X main.version=${{ github.event.inputs.version || github.ref_name }}" -o Content-Alchemist.exe
+          wails build -platform windows/amd64 -webview2 embed -debug -ldflags "-X main.version=${{ github.event.inputs.version || github.ref_name }}" -o Content-Alchemist.exe
 
       - name: Build Windows AMD64 Installer
         run: |
-          wails build -platform windows/amd64 -webview2 embed -ldflags "-X main.version=${{ github.event.inputs.version || github.ref_name }}" -nsis -o Content-Alchemist-Setup.exe
+          wails build -platform windows/amd64 -webview2 embed -debug -ldflags "-X main.version=${{ github.event.inputs.version || github.ref_name }}" -nsis -o Content-Alchemist-Setup.exe
 
       - name: Build Windows ARM64
         run: |
-          wails build -platform windows/arm64 -webview2 embed -ldflags "-X main.version=${{ github.event.inputs.version || github.ref_name }}" -o Content-Alchemist-arm64.exe
-      - name: Build Windows AMD64 (Debug Version)
-        run: |
-          wails build -platform windows/amd64 -webview2 embed -debug -o Content-Alchemist-Debug.exe
+          wails build -platform windows/arm64 -webview2 embed -debug -ldflags "-X main.version=${{ github.event.inputs.version || github.ref_name }}" -o Content-Alchemist-arm64.exe
+  
       - name: Calculate Checksums
         run: |
           cd build/bin
@@ -71,7 +69,6 @@ jobs:
             build/bin/Content-Alchemist-Setup.exe
             build/bin/Content-Alchemist-arm64.exe
             build/bin/*.sha256
-            build/bin/Content-Alchemist-Debug.exe
           retention-days: 1
 
   # 构建 macOS 版本
