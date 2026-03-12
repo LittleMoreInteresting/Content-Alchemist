@@ -20,6 +20,9 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// version 会被 ldflags 注入
+var version = "dev"
+
 func main() {
 	// 设置多线程模式
 	runtime.GOMAXPROCS(runtime.NumCPU())
@@ -57,7 +60,7 @@ func main() {
 			WebviewIsTransparent: false,
 			WindowIsTranslucent:  false,
 			About: &mac.AboutInfo{
-				Title:   "Content Alchemist",
+				Title:   fmt.Sprintf("Content Alchemist %s", version),
 				Message: "© 2024 Content Alchemist Team\n本地优先的技术写作编辑器",
 				Icon:    nil,
 			},

@@ -1,6 +1,7 @@
-# Content Alchemist 📝✨
+# Content Alchemist 内容魔法师📝✨
 
-一款现代化的智能写作工具，专为内容创作者设计。支持 AI 辅助写作、微信公众号排版美化、一键发布等功能。
+> 让公众号创作从3小时缩短到30分钟的桌面助手;
+> 支持 AI 辅助写作、微信公众号排版美化、一键复制发布等功能。
 
 ![wails](https://img.shields.io/badge/Wails-v2.11.0%20-blue)
 ![Vue3](https://img.shields.io/badge/Vue-3.x-4FC08D?style=flat-square&logo=vue.js)
