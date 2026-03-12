@@ -41,7 +41,16 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Build Windows AMD64
+      # 👇 新增：显式编译前端代码 (Vite/React/Vue等)
+      - name: Build Frontend
+        working-directory: frontend
+        run: npm run build
+
+      # 👇 新增：验证 dist 目录是否成功生成。如果没生成，Action 会在这里直接报错，方便排查
+      - name: Verify Frontend Dist Directory
+        run: dir frontend\dist
+
+        - name: Build Windows AMD64
         run: |
           wails build -platform windows/amd64 -webview2 embed -debug -ldflags "-X main.version=${{ github.event.inputs.version || github.ref_name }}" -o Content-Alchemist.exe
 
@@ -52,7 +61,7 @@ jobs:
       - name: Build Windows ARM64
         run: |
           wails build -platform windows/arm64 -webview2 embed -debug -ldflags "-X main.version=${{ github.event.inputs.version || github.ref_name }}" -o Content-Alchemist-arm64.exe
-  
+
       - name: Calculate Checksums
         run: |
           cd build/bin
@@ -96,6 +105,15 @@ jobs:
       - name: Install Frontend Dependencies
         working-directory: frontend
         run: npm ci
+
+      # 👇 新增：显式编译前端代码
+      - name: Build Frontend
+        working-directory: frontend
+        run: npm run build
+
+      # 👇 新增：验证 dist 目录是否成功生成 (macOS 下使用 ls 命令)
+      - name: Verify Frontend Dist Directory
+        run: ls -la frontend/dist
 
       - name: Build macOS AMD64
         run: |
