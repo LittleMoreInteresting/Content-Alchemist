@@ -53,8 +53,8 @@ jobs:
         run: |
           wails build -platform windows/arm64 -webview2 embed -ldflags "-X main.version=${{ github.event.inputs.version || github.ref_name }}" -o Content-Alchemist-arm64.exe
       - name: Build Windows AMD64 (Debug Version)
-          run: |
-            wails build -platform windows/amd64 -webview2 embed -debug -o Content-Alchemist-Debug.exe
+        run: |
+          wails build -platform windows/amd64 -webview2 embed -debug -o Content-Alchemist-Debug.exe
       - name: Calculate Checksums
         run: |
           cd build/bin
