@@ -562,12 +562,12 @@ const copyToClipboard = async (): Promise<void> => {
 
     // 设置临时元素样式以便复制
     tempDiv.style.cssText = `
-      font-family: -apple-system-font, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
-      font-size: 16px;
-      line-height: 1.75;
-      color: #333;
-      padding: 20px;
-      background: #fff;
+      font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', -apple-system-font, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.8;
+      color: #1f2937;
+      padding: 24px;
+      background: #fafbfc;
       max-width: 100%;
     `;
 
@@ -601,27 +601,27 @@ const copyToClipboard = async (): Promise<void> => {
 // 应用内联样式到元素（递归）
 const applyInlineStyles = (element: HTMLElement): void => {
   const styleMap: Record<string, string> = {
-    'H1': 'font-size: 24px; font-weight: bold; margin: 25px 0 20px; line-height: 1.4; color: #1a1a1a; text-align: center; padding-bottom: 15px; border-bottom: 3px solid #07c160; position: relative;',
-    'H2': 'font-size: 19px; font-weight: bold; margin: 28px 0 18px; padding: 10px 0 10px 15px; border-left: 4px solid #07c160; background: linear-gradient(90deg, #f0f9f4 0%, transparent 100%); line-height: 1.4; color: #222;',
-    'H3': 'font-size: 17px; font-weight: bold; margin: 22px 0 12px; padding-left: 12px; border-left: 3px solid #00b4ff; color: #07c160;',
-    'H4': 'font-size: 16px; font-weight: bold; margin: 18px 0 10px; color: #333; padding-left: 10px; border-left: 2px solid #ff9500;',
-    'H5': 'font-size: 15px; font-weight: bold; margin: 15px 0 8px; color: #555;',
-    'H6': 'font-size: 15px; font-weight: bold; margin: 15px 0 8px; color: #555;',
-    'P': 'margin: 15px 0; text-align: justify; text-indent: 2em;',
-    'A': 'color: #576b95; text-decoration: none; border-bottom: 1px solid #576b95;',
-    'IMG': 'max-width: 100%; height: auto; margin: 20px 0; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: block;',
-    'BLOCKQUOTE': 'margin: 25px 0; padding: 20px 25px; background: #f8f9fa; border-left: 4px solid #07c160; border-radius: 0 8px 8px 0; color: #555; font-style: italic;',
-    'UL': 'margin: 18px 0; padding-left: 30px;',
-    'OL': 'margin: 18px 0; padding-left: 30px;',
-    'LI': 'margin: 10px 0;',
-    'TABLE': 'width: 100%; border-collapse: collapse; margin: 20px 0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);',
-    'TH': 'background: #07c160; color: #fff; font-weight: bold; padding: 12px 15px; text-align: left; border: 1px solid #e8e8e8;',
-    'TD': 'border: 1px solid #e8e8e8; padding: 12px 15px; text-align: left;',
-    'HR': 'border: none; height: 1px; background: #ddd; margin: 30px 0;',
-    'STRONG': 'font-weight: bold; color: #07c160;',
-    'EM': 'font-style: italic; color: #666;',
-    'CODE': 'background: #f1f3f4; padding: 2px 8px; border-radius: 4px; font-family: monospace; font-size: 0.9em; color: #e83e8c; border: 1px solid #e8e8e8;',
-    'PRE': 'background: #1e1e1e; border-radius: 8px; padding: 16px; margin: 20px 0; overflow-x: auto; font-family: monospace; font-size: 14px; line-height: 1.6; color: #d4d4d4;',
+    'H1': 'font-size: 26px; font-weight: 700; margin: 30px 0 24px; line-height: 1.4; color: #1e40af; text-align: center; padding: 20px; background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 8px; position: relative; letter-spacing: 1px;',
+    'H2': 'font-size: 20px; font-weight: 600; margin: 32px 0 20px; padding: 12px 16px; background: linear-gradient(90deg, rgba(124, 58, 237, 0.1) 0%, transparent 100%); border-left: 4px solid #7c3aed; border-radius: 0 8px 8px 0; line-height: 1.4; color: #6d28d9; position: relative;',
+    'H3': 'font-size: 17px; font-weight: 600; margin: 26px 0 14px; padding: 8px 0 8px 14px; border-left: 3px solid #0891b2; color: #0e7490; background: linear-gradient(90deg, rgba(8, 145, 178, 0.08) 0%, transparent 100%);',
+    'H4': 'font-size: 15px; font-weight: 600; margin: 20px 0 12px; color: #ea580c; padding: 6px 0 6px 12px; border-left: 2px solid #ea580c; background: linear-gradient(90deg, rgba(234, 88, 12, 0.08) 0%, transparent 100%);',
+    'H5': 'font-size: 14px; font-weight: 600; margin: 16px 0 10px; color: #4b5563;',
+    'H6': 'font-size: 14px; font-weight: 600; margin: 16px 0 10px; color: #4b5563;',
+    'P': 'margin: 16px 0; text-align: justify; text-indent: 2em; color: #374151;',
+    'A': 'color: #2563eb; text-decoration: none; border-bottom: 1px solid rgba(37, 99, 235, 0.4);',
+    'IMG': 'max-width: 100%; height: auto; margin: 24px 0; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); display: block;',
+    'BLOCKQUOTE': 'margin: 24px 0; padding: 20px 24px 20px 48px; background: #f3f4f6; border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 8px; color: #4c1d95; position: relative; font-family: monospace;',
+    'UL': 'margin: 18px 0; padding-left: 24px; color: #374151;',
+    'OL': 'margin: 18px 0; padding-left: 24px; color: #374151;',
+    'LI': 'margin: 12px 0;',
+    'TABLE': 'width: 100%; border-collapse: separate; border-spacing: 0; margin: 24px 0; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb; background: #ffffff; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);',
+    'TH': 'background: linear-gradient(180deg, #f9fafb 0%, #f3f4f6 100%); color: #1e40af; font-weight: 600; padding: 14px 16px; text-align: left; border: none; border-bottom: 1px solid #e5e7eb; font-family: monospace; font-size: 13px;',
+    'TD': 'border: none; border-bottom: 1px solid #f3f4f6; padding: 12px 16px; text-align: left; color: #374151;',
+    'HR': 'border: none; height: 1px; background: linear-gradient(90deg, transparent 0%, rgba(59, 130, 246, 0.3) 20%, rgba(124, 58, 237, 0.4) 50%, rgba(59, 130, 246, 0.3) 80%, transparent 100%); margin: 36px 0; position: relative;',
+    'STRONG': 'font-weight: 700; color: #ea580c;',
+    'EM': 'font-style: italic; color: #6b7280;',
+    'CODE': 'background: #1e1e2e; padding: 2px 8px; border-radius: 4px; font-family: monospace; font-size: 0.88em; color: #a6e3a1; border: 1px solid #313244;',
+    'PRE': 'background: #0d1117; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin: 24px 0; overflow-x: auto; font-family: monospace; font-size: 13px; line-height: 1.7; color: #e6edf3; position: relative; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);',
   };
 
   // 应用当前元素的样式
@@ -882,202 +882,262 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
-/* 微信公众号文章样式 - 与复制效果一致 */
+/* 微信公众号文章样式 - 科技感/程序员风格 (明亮主题) */
 /* 使用 :deep() 确保样式应用到 v-html 内容 */
 :deep(.wechat-article) {
-  font-family: -apple-system-font, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
-  font-size: 16px;
-  line-height: 1.75;
-  color: #333;
-  padding: 20px;
-  background: linear-gradient(to bottom, #fafafa 0%, #fff 100px);
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', -apple-system-font, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #1f2937;
+  padding: 24px;
+  background: #fafbfc;
+  background-image:
+    linear-gradient(rgba(59, 130, 246, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
-/* H1 主标题 - 居中带装饰 */
+/* H1 主标题 - 科技感发光 */
 :deep(.wechat-article h1) {
-  font-size: 24px;
-  font-weight: bold;
-  margin: 25px 0 20px;
+  font-size: 26px;
+  font-weight: 700;
+  margin: 30px 0 24px;
   line-height: 1.4;
-  color: #1a1a1a;
+  color: #1e40af;
   text-align: center;
-  padding-bottom: 15px;
-  border-bottom: 3px solid #07c160;
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 8px;
   position: relative;
+  letter-spacing: 1px;
+}
+
+:deep(.wechat-article h1::before) {
+  content: '< ';
+  color: #7c3aed;
 }
 
 :deep(.wechat-article h1::after) {
-  content: '';
-  position: absolute;
-  bottom: -3px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 60px;
-  height: 3px;
-  background: #00b4ff;
+  content: ' />';
+  color: #7c3aed;
 }
 
-/* H2 副标题 - 绿色左边框 */
+/* H2 副标题 - 霓虹边框 */
 :deep(.wechat-article h2) {
-  font-size: 19px;
-  font-weight: bold;
-  margin: 28px 0 18px;
-  padding: 10px 0 10px 15px;
-  border-left: 4px solid #07c160;
-  border-bottom: none;
-  background: linear-gradient(90deg, #f0f9f4 0%, transparent 100%);
+  font-size: 20px;
+  font-weight: 600;
+  margin: 32px 0 20px;
+  padding: 12px 16px;
+  background: linear-gradient(90deg, rgba(124, 58, 237, 0.1) 0%, transparent 100%);
+  border-left: 4px solid #7c3aed;
+  border-radius: 0 8px 8px 0;
   line-height: 1.4;
-  color: #222;
+  color: #6d28d9;
+  position: relative;
 }
 
-/* H3 小标题 - 蓝色左边框 */
+:deep(.wechat-article h2::before) {
+  content: '#';
+  color: #7c3aed;
+  margin-right: 8px;
+  opacity: 0.8;
+}
+
+/* H3 小标题 - 青色科技 */
 :deep(.wechat-article h3) {
   font-size: 17px;
-  font-weight: bold;
-  margin: 22px 0 12px;
-  padding-left: 12px;
-  border-left: 3px solid #00b4ff;
-  color: #07c160;
+  font-weight: 600;
+  margin: 26px 0 14px;
+  padding: 8px 0 8px 14px;
+  border-left: 3px solid #0891b2;
+  color: #0e7490;
+  background: linear-gradient(90deg, rgba(8, 145, 178, 0.08) 0%, transparent 100%);
 }
 
-/* H4 更小标题 - 橙色左边框 */
+:deep(.wechat-article h3::before) {
+  content: '##';
+  color: #0891b2;
+  margin-right: 6px;
+  opacity: 0.7;
+  font-size: 0.85em;
+}
+
+/* H4 更小标题 - 橙色警告风 */
 :deep(.wechat-article h4) {
-  font-size: 16px;
-  font-weight: bold;
-  margin: 18px 0 10px;
-  color: #333;
-  padding-left: 10px;
-  border-left: 2px solid #ff9500;
+  font-size: 15px;
+  font-weight: 600;
+  margin: 20px 0 12px;
+  color: #ea580c;
+  padding: 6px 0 6px 12px;
+  border-left: 2px solid #ea580c;
+  background: linear-gradient(90deg, rgba(234, 88, 12, 0.08) 0%, transparent 100%);
+}
+
+:deep(.wechat-article h4::before) {
+  content: '###';
+  color: #ea580c;
+  margin-right: 6px;
+  opacity: 0.7;
+  font-size: 0.8em;
 }
 
 :deep(.wechat-article h5),
 :deep(.wechat-article h6) {
-  font-size: 15px;
-  font-weight: bold;
-  margin: 15px 0 8px;
-  color: #555;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 16px 0 10px;
+  color: #4b5563;
 }
 
-/* 段落 - 首行缩进 */
+:deep(.wechat-article h5)::before {
+  content: '####';
+  color: #6b7280;
+  margin-right: 6px;
+  opacity: 0.6;
+  font-size: 0.75em;
+}
+
+/* 段落 - 优化阅读体验 */
 :deep(.wechat-article p) {
-  margin: 15px 0;
+  margin: 16px 0;
   text-align: justify;
   text-indent: 2em;
+  color: #374151;
 }
 
 :deep(.wechat-article p:first-of-type) {
   text-indent: 0;
 }
 
-/* 首字下沉效果 */
+/* 首字下沉效果 - 科技风 */
 :deep(.wechat-article p:first-of-type::first-letter) {
-  font-size: 2em;
-  font-weight: bold;
-  color: #07c160;
+  font-size: 2.2em;
+  font-weight: 700;
+  color: #2563eb;
   float: left;
-  margin-right: 5px;
+  margin-right: 8px;
   line-height: 1;
 }
 
-/* 图片 - 带阴影 */
+/* 图片 - 科技边框 */
 :deep(.wechat-article img) {
   max-width: 100%;
   height: auto;
-  margin: 20px 0;
+  margin: 24px 0;
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
   display: block;
 }
 
-/* 引用块 - 渐变背景 */
+/* 引用块 - 终端风格 */
 :deep(.wechat-article blockquote) {
-  margin: 25px 0;
-  padding: 20px 25px;
-  background: linear-gradient(135deg, #f8f9fa 0%, #f0f4f8 100%);
-  border-left: 4px solid #07c160;
-  border-radius: 0 8px 8px 0;
-  color: #555;
-  font-style: italic;
+  margin: 24px 0;
+  padding: 20px 24px 20px 48px;
+  background: #f3f4f6;
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  border-radius: 8px;
+  color: #4c1d95;
   position: relative;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 :deep(.wechat-article blockquote::before) {
-  content: '"';
-  font-size: 40px;
-  color: #07c160;
-  opacity: 0.3;
+  content: '>';
+  font-size: 16px;
+  color: #7c3aed;
   position: absolute;
-  top: 10px;
-  left: 15px;
-  font-family: Georgia, serif;
-  line-height: 1;
+  top: 20px;
+  left: 20px;
+  font-weight: bold;
 }
 
-/* 列表 */
+:deep(.wechat-article blockquote::after) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #7c3aed, #3b82f6, #7c3aed);
+  border-radius: 8px 8px 0 0;
+}
+
+/* 列表 - 科技符号 */
 :deep(.wechat-article ul),
 :deep(.wechat-article ol) {
   margin: 18px 0;
-  padding-left: 30px;
+  padding-left: 24px;
 }
 
 :deep(.wechat-article ul li) {
-  margin: 10px 0;
+  margin: 12px 0;
   position: relative;
   list-style: none;
+  color: #374151;
 }
 
 :deep(.wechat-article ul li::before) {
-  content: '●';
-  color: #07c160;
+  content: '▸';
+  color: #2563eb;
   position: absolute;
   left: -20px;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 :deep(.wechat-article ol li) {
-  margin: 10px 0;
+  margin: 12px 0;
+  color: #374151;
+}
+
+:deep(.wechat-article ol li::marker) {
+  color: #7c3aed;
+  font-weight: 600;
 }
 
 :deep(.wechat-article li > ul li::before) {
-  content: '○';
-  color: #00b4ff;
+  content: '▹';
+  color: #8b5cf6;
 }
 
-/* 链接 */
+/* 链接 - 科技蓝 */
 :deep(.wechat-article a) {
-  color: #576b95;
+  color: #2563eb;
   text-decoration: none;
-  border-bottom: 1px solid #576b95;
+  border-bottom: 1px solid rgba(37, 99, 235, 0.4);
   padding-bottom: 1px;
   transition: all 0.2s;
-}
-
-:deep(.wechat-article a:hover) {
-  color: #07c160;
-  border-bottom-color: #07c160;
-}
-
-/* 代码块 - 深色主题 */
-:deep(.wechat-article pre.wechat-code-block) {
-  background: #1e1e1e;
-  border: none;
-  border-radius: 8px;
-  padding: 16px;
-  margin: 20px 0;
-  overflow-x: auto;
-  font-family: 'SF Mono', Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
-  font-size: 14px;
-  line-height: 1.6;
-  color: #d4d4d4;
   position: relative;
 }
 
-/* 代码块顶部装饰 */
+:deep(.wechat-article a:hover) {
+  color: #1d4ed8;
+  border-bottom-color: #1d4ed8;
+}
+
+/* 代码块 - VS Code 暗色主题风格 */
+:deep(.wechat-article pre.wechat-code-block) {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 24px 0;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #e6edf3;
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* 代码块顶部装饰 - macOS 窗口风格 */
 :deep(.wechat-article pre.wechat-code-block::before) {
   content: '';
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 16px;
+  left: 16px;
   width: 12px;
   height: 12px;
   background: #ff5f56;
@@ -1085,54 +1145,80 @@ onUnmounted(() => {
   box-shadow: 20px 0 0 #ffbd2e, 40px 0 0 #27c93f;
 }
 
+/* 代码块标题栏 */
+:deep(.wechat-article pre.wechat-code-block::after) {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 44px;
+  background: linear-gradient(180deg, #161b22 0%, #0d1117 100%);
+  border-radius: 12px 12px 0 0;
+  border-bottom: 1px solid #30363d;
+  z-index: 0;
+}
+
 :deep(.wechat-article pre.wechat-code-block code) {
   background: transparent;
   padding: 0;
+  padding-top: 28px;
   border-radius: 0;
   font-size: inherit;
   color: inherit;
+  display: block;
+  position: relative;
+  z-index: 1;
 }
 
-/* 行内代码 */
+/* 行内代码 - 明亮背景下的暗色风格 */
 :deep(.wechat-article code.wechat-inline-code) {
-  background: #f1f3f4;
+  background: #1e1e2e;
   padding: 2px 8px;
   border-radius: 4px;
-  font-family: 'SF Mono', Monaco, Consolas, monospace;
-  font-size: 0.9em;
-  color: #e83e8c;
-  border: 1px solid #e8e8e8;
+  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, Consolas, monospace;
+  font-size: 0.88em;
+  color: #a6e3a1;
+  border: 1px solid #313244;
 }
 
-/* 表格 - 美观样式 */
+/* 表格 - 数据面板风格 */
 :deep(.wechat-article table) {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  margin: 20px 0;
+  margin: 24px 0;
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 }
 
 :deep(.wechat-article th) {
-  background: linear-gradient(135deg, #07c160 0%, #05a050 100%);
-  color: #fff;
-  font-weight: bold;
-  padding: 12px 15px;
+  background: linear-gradient(180deg, #f9fafb 0%, #f3f4f6 100%);
+  color: #1e40af;
+  font-weight: 600;
+  padding: 14px 16px;
   text-align: left;
   border: none;
+  border-bottom: 1px solid #e5e7eb;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 :deep(.wechat-article td) {
   border: none;
-  border-bottom: 1px solid #f0f0f0;
-  padding: 12px 15px;
+  border-bottom: 1px solid #f3f4f6;
+  padding: 12px 16px;
   text-align: left;
+  color: #374151;
 }
 
 :deep(.wechat-article tr:nth-child(even)) {
-  background: #fafafa;
+  background: #f9fafb;
 }
 
 :deep(.wechat-article tr:last-child td) {
@@ -1140,40 +1226,47 @@ onUnmounted(() => {
 }
 
 :deep(.wechat-article tr:hover) {
-  background: #f0f9f4;
+  background: rgba(59, 130, 246, 0.05);
 }
 
-/* 分隔线 - 渐变 */
+/* 分隔线 - 扫描线效果 */
 :deep(.wechat-article hr) {
   border: none;
   height: 1px;
-  background: linear-gradient(90deg, transparent 0%, #ddd 20%, #ddd 80%, transparent 100%);
-  margin: 30px 0;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(59, 130, 246, 0.3) 20%,
+    rgba(124, 58, 237, 0.4) 50%,
+    rgba(59, 130, 246, 0.3) 80%,
+    transparent 100%);
+  margin: 36px 0;
   position: relative;
 }
 
 :deep(.wechat-article hr::before) {
-  content: '◆';
-  color: #07c160;
+  content: '//';
+  color: #3b82f6;
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  background: #fff;
-  padding: 0 10px;
-  font-size: 10px;
+  background: #fafbfc;
+  padding: 0 16px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  letter-spacing: 2px;
 }
 
-/* 加粗 - 绿色 */
+/* 加粗 - 高亮 */
 :deep(.wechat-article strong) {
-  font-weight: bold;
-  color: #07c160;
+  font-weight: 700;
+  color: #ea580c;
 }
 
-/* 斜体 */
+/* 斜体 - 注释风格 */
 :deep(.wechat-article em) {
   font-style: italic;
-  color: #666;
+  color: #6b7280;
 }
 
 /* 复制按钮样式 */
