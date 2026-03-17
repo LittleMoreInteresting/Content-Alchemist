@@ -6,6 +6,7 @@
 import { ref } from 'vue';
 import * as App from '../../wailsjs/go/backend/App';
 import type { models } from '../../wailsjs/go/models';
+import { EventsOn } from '../../wailsjs/runtime';
 
 // 导出 Article 类型
 export type Article = models.Article;
@@ -23,6 +24,9 @@ export interface AIConfig {
   temperature: number;
   model: string;
 }
+
+// 流式回调类型
+export type StreamCallback = (chunk: string, done: boolean, error?: string) => void;
 
 export type FileErrorCode =
   | 'FILE_NOT_FOUND'
@@ -262,6 +266,117 @@ export function useWails() {
     });
   };
 
+  // ============================================
+  // 流式生成
+  // ============================================
+
+  /**
+   * 流式生成大纲
+   * @param title 标题
+   * @param requirements 要求
+   * @param positioning 定位
+   * @param onChunk 数据块回调
+   * @returns 取消订阅函数
+   */
+  const generateOutlineStream = (
+    title: string,
+    requirements: string,
+    positioning: string,
+    onChunk: StreamCallback
+  ): (() => void) => {
+    let isCancelled = false;
+    let unsubscribe: (() => void) | null = null;
+
+    // 包装回调以检查取消状态
+    const wrappedCallback: StreamCallback = (chunk, done, error) => {
+      if (!isCancelled) {
+        onChunk(chunk, done, error);
+      }
+    };
+
+    // 设置事件监听
+    unsubscribe = EventsOn('outline:stream', (data: any) => {
+      const { chunk, done, error: errMsg, titles, outline } = data;
+
+      if (errMsg) {
+        wrappedCallback('', true, errMsg);
+      } else if (done) {
+        // 完成时如果有完整数据，一并返回
+        if (outline && titles) {
+          wrappedCallback(outline, true);
+        } else {
+          wrappedCallback('', true);
+        }
+      } else {
+        wrappedCallback(chunk || '', false);
+      }
+    });
+
+    // 启动流式生成
+    App.GenerateOutlineStream(title, requirements, positioning).catch((err: any) => {
+      wrappedCallback('', true, err?.message || '流式生成失败');
+    });
+
+    // 返回取消函数
+    return () => {
+      isCancelled = true;
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
+    };
+  };
+
+  /**
+   * 流式生成文章
+   * @param title 标题
+   * @param outline 大纲
+   * @param requirements 要求
+   * @param onChunk 数据块回调
+   * @returns 取消订阅函数
+   */
+  const generateArticleStream = (
+    title: string,
+    outline: string,
+    requirements: string,
+    onChunk: StreamCallback
+  ): (() => void) => {
+    let isCancelled = false;
+    let unsubscribe: (() => void) | null = null;
+
+    // 包装回调以检查取消状态
+    const wrappedCallback: StreamCallback = (chunk, done, error) => {
+      if (!isCancelled) {
+        onChunk(chunk, done, error);
+      }
+    };
+
+    // 设置事件监听
+    unsubscribe = EventsOn('article:stream', (data: any) => {
+      const { chunk, done, error: errMsg } = data;
+
+      if (errMsg) {
+        wrappedCallback('', true, errMsg);
+      } else {
+        wrappedCallback(chunk || '', done);
+      }
+    });
+
+    // 启动流式生成
+    App.GenerateArticleStream(title, outline, requirements).catch((err: any) => {
+      wrappedCallback('', true, err?.message || '流式生成失败');
+    });
+
+    // 返回取消函数
+    return () => {
+      isCancelled = true;
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
+    };
+  };
+
   /**
    * 智能保存文章
    * 如果未保存到本地文件，则根据标题自动生成文件名并弹出对话框
@@ -322,11 +437,15 @@ export function useWails() {
     getAIConfig,
     saveAIConfig,
 
-    // AI生成
+    // AI生成（非流式）
     generateOutline,
     generateArticle,
     optimizeContent,
     generateViralTitles,
+
+    // 流式生成
+    generateOutlineStream,
+    generateArticleStream,
 
     // 智能保存
     saveArticleWithSmartNaming,

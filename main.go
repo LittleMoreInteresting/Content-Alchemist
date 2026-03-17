@@ -7,6 +7,7 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/wailsapp/wails/v2"
@@ -26,6 +27,13 @@ var version = "dev"
 func main() {
 	// 设置多线程模式
 	runtime.GOMAXPROCS(runtime.NumCPU())
+
+	// 获取用户配置目录用于WebView2数据
+	configDir, _ := os.UserConfigDir()
+	webviewDataDir := ""
+	if configDir != "" {
+		webviewDataDir = filepath.Join(configDir, "ContentAlchemist", "webview2")
+	}
 
 	// 创建应用实例
 	app := backend.NewApp()
@@ -71,7 +79,7 @@ func main() {
 			WindowIsTranslucent:               false,
 			DisableWindowIcon:                 false,
 			DisableFramelessWindowDecorations: false,
-			WebviewUserDataPath:               "",
+			WebviewUserDataPath:               webviewDataDir,
 			WebviewBrowserPath:                "",
 			Theme:                             windows.SystemDefault,
 			CustomTheme: &windows.ThemeSettings{

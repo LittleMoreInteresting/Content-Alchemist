@@ -14,8 +14,16 @@ export function GenerateArticle(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GenerateArticle'](arg1, arg2, arg3);
 }
 
+export function GenerateArticleStream(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GenerateArticleStream'](arg1, arg2, arg3);
+}
+
 export function GenerateOutline(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GenerateOutline'](arg1, arg2, arg3);
+}
+
+export function GenerateOutlineStream(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GenerateOutlineStream'](arg1, arg2, arg3);
 }
 
 export function GenerateViralTitles(arg1, arg2, arg3) {
@@ -28,6 +36,10 @@ export function GetAIConfig() {
 
 export function GetArticleByUUID(arg1) {
   return window['go']['backend']['App']['GetArticleByUUID'](arg1);
+}
+
+export function GetContext() {
+  return window['go']['backend']['App']['GetContext']();
 }
 
 export function GetPositioning() {

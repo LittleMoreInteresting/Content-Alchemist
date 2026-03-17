@@ -12,17 +12,25 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App 应用主结构体
 type App struct {
-	ctx       context.Context
-	db        *db.DB
-	fileMgr   *editor.FileManager
-	aiService *ai.Service
-	configDir string
+	ctx        context.Context
+	ctxCancel  context.CancelFunc
+	db         *db.DB
+	fileMgr    *editor.FileManager
+	saiService *ai.Service
+	configDir  string
+
+	// 并发安全保护
+	mu sync.RWMutex
+	// 活跃的操作计数，用于优雅关闭
+	wg sync.WaitGroup
 }
 
 // NewApp 创建新应用实例
@@ -34,12 +42,16 @@ func NewApp() *App {
 
 // Startup 在应用启动时调用（Wails生命周期）
 func (a *App) Startup(ctx context.Context) {
+	// 创建可取消的上下文，用于应用内部操作
+	ctx, cancel := context.WithCancel(ctx)
 	a.ctx = ctx
+	a.ctxCancel = cancel
 
 	// 获取配置目录
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		fmt.Printf("无法获取配置目录: %v\n", err)
+		runtime.LogErrorf(ctx, "无法获取配置目录: %v", err)
+		return
 	}
 
 	a.configDir = filepath.Join(configDir, "ContentAlchemist")
@@ -47,7 +59,8 @@ func (a *App) Startup(ctx context.Context) {
 	// 初始化数据库
 	database, err := db.New(a.configDir)
 	if err != nil {
-		fmt.Printf("无法初始化数据库: %v\n", err)
+		runtime.LogErrorf(ctx, "无法初始化数据库: %v", err)
+		return
 	}
 	a.db = database
 
@@ -55,8 +68,40 @@ func (a *App) Startup(ctx context.Context) {
 	a.initAIService()
 }
 
+// GetContext 获取应用上下文（线程安全）
+func (a *App) GetContext() context.Context {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.ctx
+}
+
 // Shutdown 在应用关闭时调用（Wails生命周期）
 func (a *App) Shutdown(ctx context.Context) {
+	// 取消上下文，通知所有进行中的操作停止
+	if a.ctxCancel != nil {
+		a.ctxCancel()
+	}
+
+	// 等待所有操作完成（带超时）
+	done := make(chan struct{})
+	go func() {
+		a.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// 所有操作已完成
+	case <-time.After(5 * time.Second):
+		// 超时，强制关闭
+		fmt.Println("关闭超时，强制关闭")
+	}
+
+	// 关闭 AI 服务
+	if a.saiService != nil {
+		a.saiService.Close()
+	}
+
 	if a.db != nil {
 		a.db.Close()
 	}
@@ -441,8 +486,8 @@ func (a *App) SaveAIConfig(config *models.AIConfig) error {
 	}
 
 	// 更新 AI 服务配置
-	if a.aiService != nil {
-		a.aiService.UpdateConfig(config)
+	if a.saiService != nil {
+		a.saiService.UpdateConfig(config)
 	}
 
 	return nil
@@ -486,7 +531,7 @@ func (a *App) initAIService() {
 		fmt.Printf("获取AI配置失败: %v\n", err)
 		return
 	}
-	a.aiService = ai.NewService(config)
+	a.saiService = ai.NewService(config)
 }
 
 // GenerateOutline 根据标题、写作要求和公众号定位生成大纲和候选标题
@@ -495,7 +540,7 @@ func (a *App) initAIService() {
 // positioning: 公众号定位
 // 返回: 包含3个候选标题和大纲的结果
 func (a *App) GenerateOutline(title string, requirements string, positioning string) (*models.GenerateOutlineResult, error) {
-	if a.aiService == nil {
+	if a.saiService == nil {
 		// 重新初始化 AI 服务
 		a.initAIService()
 	}
@@ -504,7 +549,7 @@ func (a *App) GenerateOutline(title string, requirements string, positioning str
 		return nil, fmt.Errorf("标题不能为空")
 	}
 
-	result, err := a.aiService.GenerateOutlineWithTitles(title, requirements, positioning)
+	result, err := a.saiService.GenerateOutlineWithTitles(title, requirements, positioning)
 	if err != nil {
 		return nil, err
 	}
@@ -515,13 +560,13 @@ func (a *App) GenerateOutline(title string, requirements string, positioning str
 	}, nil
 }
 
-// GenerateArticle 根据大纲生成文章
+// GenerateArticle 根据大纲生成文章（非流式）
 // title: 文章标题
 // outline: 文章大纲
 // requirements: 写作要求
 // 返回: 生成的文章内容
 func (a *App) GenerateArticle(title string, outline string, requirements string) (string, error) {
-	if a.aiService == nil {
+	if a.saiService == nil {
 		a.initAIService()
 	}
 
@@ -533,12 +578,129 @@ func (a *App) GenerateArticle(title string, outline string, requirements string)
 		return "", fmt.Errorf("大纲不能为空，请先生成大纲")
 	}
 
-	article, err := a.aiService.GenerateArticleFromOutline(title, outline, requirements)
+	article, err := a.saiService.GenerateArticleFromOutline(title, outline, requirements)
 	if err != nil {
 		return "", err
 	}
 
 	return article, nil
+}
+
+// GenerateArticleStream 流式生成文章
+// 通过 Wails 事件系统发送流式数据
+// 事件名称: "article:stream"
+// 事件数据: {chunk: string, done: bool, error: string}
+func (a *App) GenerateArticleStream(title string, outline string, requirements string) error {
+	if a.saiService == nil {
+		a.initAIService()
+	}
+
+	if title == "" {
+		return fmt.Errorf("标题不能为空")
+	}
+
+	if outline == "" {
+		return fmt.Errorf("大纲不能为空，请先生成大纲")
+	}
+
+	// 使用流式生成，传递可取消的上下文
+	ctx, cancel := context.WithCancel(a.ctx)
+	defer cancel()
+
+	a.wg.Add(1)
+	defer a.wg.Done()
+
+	err := a.saiService.GenerateArticleStream(ctx, title, outline, requirements, func(chunk string) error {
+		// 发送数据块到前端
+		runtime.EventsEmit(a.ctx, "article:stream", map[string]interface{}{
+			"chunk": chunk,
+			"done":  false,
+			"error": "",
+		})
+		return nil
+	})
+
+	if err != nil {
+		// 发送错误事件
+		runtime.EventsEmit(a.ctx, "article:stream", map[string]interface{}{
+			"chunk": "",
+			"done":  true,
+			"error": err.Error(),
+		})
+		return err
+	}
+
+	// 发送完成事件
+	runtime.EventsEmit(a.ctx, "article:stream", map[string]interface{}{
+		"chunk": "",
+		"done":  true,
+		"error": "",
+	})
+
+	return nil
+}
+
+// GenerateOutlineStream 流式生成大纲
+// 事件名称: "outline:stream"
+func (a *App) GenerateOutlineStream(title string, requirements string, positioning string) error {
+	if a.saiService == nil {
+		a.initAIService()
+	}
+
+	if title == "" {
+		return fmt.Errorf("标题不能为空")
+	}
+
+	// 先发送开始事件
+	runtime.EventsEmit(a.ctx, "outline:stream", map[string]interface{}{
+		"chunk": "",
+		"done":  false,
+		"error": "",
+		"start": true,
+	})
+
+	// 使用非流式 API 获取完整结果
+	result, err := a.saiService.GenerateOutlineWithTitles(title, requirements, positioning)
+	if err != nil {
+		runtime.EventsEmit(a.ctx, "outline:stream", map[string]interface{}{
+			"chunk": "",
+			"done":  true,
+			"error": err.Error(),
+		})
+		return err
+	}
+
+	// 模拟流式输出：将大纲分块发送（按rune/字符而非字节切割，避免乱码）
+	outline := result.Outline
+	runes := []rune(outline)
+	chunkSize := 10 // 每10个字符发送一次
+
+	for i := 0; i < len(runes); i += chunkSize {
+		end := i + chunkSize
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunk := string(runes[i:end])
+		runtime.EventsEmit(a.ctx, "outline:stream", map[string]interface{}{
+			"chunk":  chunk,
+			"done":   false,
+			"error":  "",
+			"titles": result.Titles,
+		})
+		// 小延迟模拟打字机效果
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// 发送完成事件，包含完整数据
+	runtime.EventsEmit(a.ctx, "outline:stream", map[string]interface{}{
+		"chunk":   "",
+		"done":    true,
+		"error":   "",
+		"outline": result.Outline,
+		"titles":  result.Titles,
+	})
+
+	return nil
 }
 
 // OptimizeContent 优化文章内容
@@ -547,7 +709,7 @@ func (a *App) GenerateArticle(title string, outline string, requirements string)
 // requirements: 额外要求
 // 返回: 优化后的内容
 func (a *App) OptimizeContent(content string, optimizeType string, requirements string) (string, error) {
-	if a.aiService == nil {
+	if a.saiService == nil {
 		a.initAIService()
 	}
 
@@ -555,7 +717,7 @@ func (a *App) OptimizeContent(content string, optimizeType string, requirements 
 		return "", fmt.Errorf("内容不能为空")
 	}
 
-	result, err := a.aiService.OptimizeContent(content, optimizeType, requirements)
+	result, err := a.saiService.OptimizeContent(content, optimizeType, requirements)
 	if err != nil {
 		return "", err
 	}
@@ -569,7 +731,7 @@ func (a *App) OptimizeContent(content string, optimizeType string, requirements 
 // count: 生成标题数量（默认5个，最多10个）
 // 返回: 标题列表
 func (a *App) GenerateViralTitles(content string, positioning string, count int) ([]string, error) {
-	if a.aiService == nil {
+	if a.saiService == nil {
 		a.initAIService()
 	}
 
@@ -577,7 +739,7 @@ func (a *App) GenerateViralTitles(content string, positioning string, count int)
 		return nil, fmt.Errorf("内容不能为空")
 	}
 
-	titles, err := a.aiService.GenerateViralTitles(content, positioning, count)
+	titles, err := a.saiService.GenerateViralTitles(content, positioning, count)
 	if err != nil {
 		return nil, err
 	}

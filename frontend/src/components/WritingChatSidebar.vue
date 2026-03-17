@@ -158,6 +158,7 @@ interface Step {
 const props = defineProps<{
   articleTitle: string;
   isProcessing: boolean;
+  streamingContent?: string;
 }>();
 
 const emit = defineEmits<{

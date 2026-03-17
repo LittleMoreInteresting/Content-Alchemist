@@ -19,6 +19,7 @@
           ref="sidebarRef"
           :article-title="articleTitle"
           :is-processing="isProcessing"
+          :streaming-content="streamingContent"
           @send-message="handleSendMessage"
           @quick-action="handleQuickAction"
           @open-recent="handleOpenRecent"
@@ -123,7 +124,16 @@ import MarkdownIt from 'markdown-it';
 import FileToolbar from './FileToolbar.vue';
 import WritingChatSidebar from './WritingChatSidebar.vue';
 import SettingsModal, { type AIConfig } from './SettingsModal.vue';
-import { useWails, FileError } from '../composables/useWails';
+import { useWails, FileError, type StreamCallback } from '../composables/useWails';
+
+// 防抖工具函数
+function debounce<T extends (...args: any[]) => void>(fn: T, delay: number): (...args: Parameters<T>) => void {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  return (...args: Parameters<T>) => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  };
+}
 
 // ============================================
 // Markdown 渲染
@@ -153,7 +163,8 @@ const filePath = ref('');
 const currentStep = ref(0);
 const isProcessing = ref(false);
 const isStreaming = ref(false);
-const streamingAbortController = ref<AbortController | null>(null);
+const streamingContent = ref('');
+const streamUnsubscribe = ref<(() => void) | null>(null);
 
 // UI 状态
 const sidebarCollapsed = ref(false);
@@ -214,11 +225,13 @@ const currentStepInfo = computed(() => {
 });
 
 // ============================================
-// 监听编辑器内容变化
+// 监听编辑器内容变化（带防抖）
 // ============================================
 watch(editorContent, (newValue, oldValue) => {
   if (oldValue !== undefined && newValue !== oldValue) {
     isDirty.value = true;
+    // 触发防抖自动保存
+    debouncedAutoSave();
   }
 });
 
@@ -248,11 +261,11 @@ const handleSave = async (overwrite = false): Promise<void> => {
     if (err instanceof FileError && err.code === 'FILE_EXISTS_CONFIRM') {
       const filePathMatch = err.message.match(/文件已存在: (.+)$/);
       const existingFilePath = filePathMatch ? filePathMatch[1] : '';
-      
+
       const confirmed = window.confirm(
         `文件 "${existingFilePath}" 已存在。\n\n是否覆盖保存？\n（旧版本将被替换）`
       );
-      
+
       if (confirmed) {
         await handleSave(true);
         return;
@@ -266,8 +279,9 @@ const handleSave = async (overwrite = false): Promise<void> => {
   }
 };
 
+// 防抖自动保存（3秒后自动保存）
 const autoSave = async (overwrite = false): Promise<void> => {
-  if (!articleTitle.value || !editorContent.value) return;
+  if (!articleTitle.value || !editorContent.value || !isDirty.value) return;
 
   isSaving.value = true;
 
@@ -296,38 +310,30 @@ const autoSave = async (overwrite = false): Promise<void> => {
   }
 };
 
+const debouncedAutoSave = debounce(() => autoSave(), 3000);
+
 // ============================================
 // 对话消息处理
 // ============================================
 const handleSendMessage = async (message: string, step: number) => {
-  isProcessing.value = true;
-
-  try {
-    // 解析用户输入
-    const parsedInput = parseUserInput(message, step);
-    
-    if (step === 0) {
-      // 步骤1: 设定主题
-      await handleStep1_Setup(parsedInput);
-    } else if (step === 1) {
-      // 步骤2: 生成框架（大纲）
-      await handleStep2_GenerateOutline(parsedInput);
-    } else if (step === 2) {
-      // 步骤3: 生成内容
-      await handleStep3_GenerateArticle(parsedInput);
-    } else if (step === 3) {
-      // 步骤4: 优化调整
-      await handleStep4_Optimize(parsedInput);
-    } else if (step === 4) {
-      // 步骤5: 生成标题
-      await handleStep5_GenerateTitles(parsedInput);
-    }
-  } catch (err) {
-    console.error('处理消息失败:', err);
-    handleError(err instanceof Error ? err.message : '处理失败');
-    sidebarRef.value?.addMessage('assistant', `❌ ${err instanceof Error ? err.message : '处理失败'}`);
-  } finally {
-    isProcessing.value = false;
+  // 解析用户输入
+  const parsedInput = parseUserInput(message, step);
+  
+  if (step === 0) {
+    // 步骤1: 设定主题
+    await handleStep1_Setup(parsedInput);
+  } else if (step === 1) {
+    // 步骤2: 生成框架（大纲）
+    await handleStep2_GenerateOutline(parsedInput);
+  } else if (step === 2) {
+    // 步骤3: 生成内容
+    await handleStep3_GenerateArticle(parsedInput);
+  } else if (step === 3) {
+    // 步骤4: 优化调整
+    await handleStep4_Optimize(parsedInput);
+  } else if (step === 4) {
+    // 步骤5: 生成标题
+    await handleStep5_GenerateTitles(parsedInput);
   }
 };
 
@@ -385,140 +391,241 @@ const handleStep1_Setup = async (input: { title?: string; requirements?: string 
   }
 };
 
-// 步骤2: 生成大纲
+// 步骤2: 生成大纲（流式）
 const handleStep2_GenerateOutline = async (input: any) => {
-  sidebarRef.value?.addStreamingMessage('🤔 正在思考文章结构...');
+  if (!articleTitle.value) {
+    sidebarRef.value?.addMessage('assistant', '⚠️ 请先输入文章标题');
+    return;
+  }
+
+  isProcessing.value = true;
   isStreaming.value = true;
+  streamingContent.value = '';
 
-  try {
-    const result = await wails.generateOutline(
-      articleTitle.value,
-      input.requirements || '',
-      savedPositioning.value
-    );
+  // 添加流式消息
+  sidebarRef.value?.addStreamingMessage('');
 
-    if (result) {
-      articleOutline.value = result.outline;
-      
-      // 流式显示大纲
-      await streamTextToEditor(result.outline, 'outline');
+  // 清空编辑器并准备接收流式内容
+  const separator = editorContent.value ? '\n\n---\n\n' : '';
+  let receivedContent = '';
 
+  const onChunk: StreamCallback = (chunk, done, errorMsg) => {
+    if (errorMsg) {
+      isStreaming.value = false;
+      isProcessing.value = false;
       sidebarRef.value?.finishStreaming();
-      sidebarRef.value?.updateStreamingMessage(
-        `✅ 大纲已生成！\n\n已为您生成 ${result.titles?.length || 0} 个候选标题，大纲内容已显示在编辑区。\n\n您可以：\n1. 直接在编辑区修改大纲\n2. 点击「生成文章」继续创作\n3. 提出修改意见重新生成`
-      );
+      sidebarRef.value?.addMessage('assistant', `❌ 生成大纲失败: ${errorMsg}`);
+      return;
+    }
 
-      // 保存候选标题供后续使用
-      if (result.titles && result.titles.length > 0) {
-        (window as any).candidateTitles = result.titles;
+    if (done) {
+      isStreaming.value = false;
+      isProcessing.value = false;
+      articleOutline.value = receivedContent;
+      sidebarRef.value?.finishStreaming();
+      
+      // 保存候选标题
+      if ((chunk as any)?.titles) {
+        (window as any).candidateTitles = (chunk as any).titles;
       }
+      
+      sidebarRef.value?.addMessage(
+        'assistant',
+        `✅ 大纲已生成完成！\n\n您可以：\n1. 在编辑区修改完善大纲\n2. 点击「生成文章」继续创作\n3. 提出修改意见重新生成`
+      );
 
       // 自动进入下一步
       currentStep.value = 2;
       sidebarRef.value?.nextStep();
+      
+      // 自动保存
+      autoSave();
+      return;
     }
-  } catch (err) {
-    sidebarRef.value?.finishStreaming();
-    sidebarRef.value?.addMessage('assistant', `❌ 生成大纲失败: ${err instanceof Error ? err.message : '未知错误'}`);
-  } finally {
-    isStreaming.value = false;
-  }
+
+    // 累积内容
+    receivedContent += chunk;
+    streamingContent.value = receivedContent;
+    
+    // 实时更新编辑器
+    editorContent.value = editorContent.value + separator + receivedContent;
+    
+    // 更新流式消息
+    sidebarRef.value?.updateStreamingMessage(receivedContent);
+    
+    // 滚动到底部
+    if (editorRef.value) {
+      editorRef.value.scrollTop = editorRef.value.scrollHeight;
+    }
+  };
+
+  // 启动流式生成
+  streamUnsubscribe.value = wails.generateOutlineStream(
+    articleTitle.value,
+    input.requirements || '',
+    savedPositioning.value,
+    onChunk
+  );
 };
 
-// 步骤3: 生成文章
+// 步骤3: 生成文章（流式）
 const handleStep3_GenerateArticle = async (input: any) => {
-  if (!articleOutline.value) {
-    sidebarRef.value?.addMessage('assistant', '⚠️ 请先生成文章大纲');
+  if (!articleTitle.value) {
+    sidebarRef.value?.addMessage('assistant', '⚠️ 请先输入文章标题');
     return;
   }
 
-  sidebarRef.value?.addStreamingMessage('✍️ 正在撰写文章内容...');
-  isStreaming.value = true;
-
-  try {
-    const combinedRequirements = [
-      input.requirements,
-      savedPositioning.value ? `公众号定位：${savedPositioning.value}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n\n');
-
-    // 使用流式生成
-    await streamGenerateArticle(
-      articleTitle.value,
-      articleOutline.value,
-      combinedRequirements
-    );
-
-    sidebarRef.value?.finishStreaming();
-    sidebarRef.value?.updateStreamingMessage(
-      `✅ 文章生成完成！\n\n文章内容已显示在编辑区。您可以：\n1. 在编辑区修改完善\n2. 使用「优化调整」功能改进\n3. 继续生成更多内容`
-    );
-
-    // 自动进入下一步
-    currentStep.value = 3;
-    sidebarRef.value?.nextStep();
-  } catch (err) {
-    sidebarRef.value?.finishStreaming();
-    sidebarRef.value?.addMessage('assistant', `❌ 生成文章失败: ${err instanceof Error ? err.message : '未知错误'}`);
-  } finally {
-    isStreaming.value = false;
+  if (!articleOutline.value) {
+    sidebarRef.value?.addMessage('assistant', '⚠️ 请先生成大纲');
+    return;
   }
+
+  isProcessing.value = true;
+  isStreaming.value = true;
+  streamingContent.value = '';
+
+  // 添加流式消息
+  sidebarRef.value?.addStreamingMessage('✍️ 正在撰写文章内容...\n\n');
+
+  const combinedRequirements = [
+    input.requirements,
+    savedPositioning.value ? `公众号定位：${savedPositioning.value}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  // 清空编辑器准备接收文章内容
+  const savedOutline = articleOutline.value;
+  editorContent.value = `# ${articleTitle.value}\n\n`;
+  let receivedContent = '';
+
+  const onChunk: StreamCallback = (chunk, done, errorMsg) => {
+    if (errorMsg) {
+      isStreaming.value = false;
+      isProcessing.value = false;
+      sidebarRef.value?.finishStreaming();
+      sidebarRef.value?.addMessage('assistant', `❌ 生成文章失败: ${errorMsg}`);
+      return;
+    }
+
+    if (done) {
+      isStreaming.value = false;
+      isProcessing.value = false;
+      sidebarRef.value?.finishStreaming();
+      
+      sidebarRef.value?.addMessage(
+        'assistant',
+        `✅ 文章生成完成！\n\n您可以：\n1. 在编辑区修改完善\n2. 使用「优化调整」功能改进\n3. 继续生成更多内容`
+      );
+
+      // 自动进入下一步
+      currentStep.value = 3;
+      sidebarRef.value?.nextStep();
+      
+      // 自动保存
+      autoSave();
+      return;
+    }
+
+    // 累积内容
+    receivedContent += chunk;
+    streamingContent.value = receivedContent;
+    
+    // 实时更新编辑器（在标题后追加）
+    editorContent.value = `# ${articleTitle.value}\n\n${receivedContent}`;
+    
+    // 更新流式消息（显示部分内容）
+    const previewLength = Math.min(receivedContent.length, 200);
+    const preview = receivedContent.substring(0, previewLength) + (receivedContent.length > 200 ? '...' : '');
+    sidebarRef.value?.updateStreamingMessage(`✍️ 正在撰写文章内容...\n\n${preview}`);
+    
+    // 滚动到底部
+    if (editorRef.value) {
+      editorRef.value.scrollTop = editorRef.value.scrollHeight;
+    }
+  };
+
+  // 启动流式生成
+  streamUnsubscribe.value = wails.generateArticleStream(
+    articleTitle.value,
+    savedOutline,
+    combinedRequirements,
+    onChunk
+  );
 };
 
 // 步骤4: 优化调整
 const handleStep4_Optimize = async (input: any) => {
   const message = input.optimizationRequest || '请润色优化这篇文章';
-  
-  sidebarRef.value?.addStreamingMessage('💎 正在优化文章内容...');
+
+  isProcessing.value = true;
   isStreaming.value = true;
 
+  sidebarRef.value?.addStreamingMessage('💎 正在优化文章内容...');
+
   try {
-    // 这里可以调用不同的优化 API
-    // 暂时使用模拟的流式输出
-    await simulateOptimization(message);
+    // 获取优化类型
+    let optimizeType = 'polish';
+    if (message.includes('精简')) optimizeType = 'simplify';
+    else if (message.includes('扩写')) optimizeType = 'expand';
+    else if (message.includes('案例')) optimizeType = 'example';
+
+    // 调用优化 API（非流式）
+    const optimizedContent = await wails.optimizeContent(
+      editorContent.value,
+      optimizeType,
+      message
+    );
+
+    // 流式显示优化结果
+    await streamTextToEditor('\n\n---\n\n**优化后**:\n\n' + optimizedContent, 'article');
 
     sidebarRef.value?.finishStreaming();
-    sidebarRef.value?.updateStreamingMessage(
+    sidebarRef.value?.addMessage(
+      'assistant',
       `✅ 优化完成！\n\n您还可以：\n1. 继续提出优化意见\n2. 生成爆款标题\n3. 保存文章`
     );
 
     // 自动进入下一步
     currentStep.value = 4;
     sidebarRef.value?.nextStep();
+
+    // 自动保存
+    autoSave();
   } catch (err) {
     sidebarRef.value?.finishStreaming();
     sidebarRef.value?.addMessage('assistant', `❌ 优化失败: ${err instanceof Error ? err.message : '未知错误'}`);
   } finally {
+    isProcessing.value = false;
     isStreaming.value = false;
   }
 };
 
 // 步骤5: 生成标题
-const handleStep5_GenerateTitles = async (input: any) => {
+const handleStep5_GenerateTitles = async (_input: any) => {
+  isProcessing.value = true;
+
   sidebarRef.value?.addStreamingMessage('🎯 正在生成爆款标题...');
-  isStreaming.value = true;
 
   try {
-    const result = await wails.generateOutline(
-      articleTitle.value,
-      '生成5个更具吸引力的爆款标题，要求：' + (input.requirements || '吸睛、有悬念、符合公众号风格'),
-      savedPositioning.value
+    const titles = await wails.generateViralTitles(
+      editorContent.value,
+      savedPositioning.value,
+      5
     );
 
-    if (result && result.titles) {
-      const titlesText = result.titles.map((t: string, i: number) => `${i + 1}. ${t}`).join('\n');
-      
-      sidebarRef.value?.finishStreaming();
-      sidebarRef.value?.updateStreamingMessage(
-        `✅ 爆款标题生成完成！\n\n候选标题：\n${titlesText}\n\n您可以选择一个应用到文章中。`
-      );
-    }
+    const titlesText = titles.map((t: string, i: number) => `${i + 1}. ${t}`).join('\n');
+
+    sidebarRef.value?.finishStreaming();
+    sidebarRef.value?.addMessage(
+      'assistant',
+      `✅ 爆款标题生成完成！\n\n候选标题：\n${titlesText}\n\n您可以选择一个应用到文章中。`
+    );
   } catch (err) {
     sidebarRef.value?.finishStreaming();
     sidebarRef.value?.addMessage('assistant', `❌ 生成标题失败: ${err instanceof Error ? err.message : '未知错误'}`);
   } finally {
-    isStreaming.value = false;
+    isProcessing.value = false;
   }
 };
 
@@ -527,62 +634,41 @@ const handleStep5_GenerateTitles = async (input: any) => {
 // ============================================
 const streamTextToEditor = async (text: string, _type: 'outline' | 'article') => {
   const chars = text.split('');
-  let currentText = editorContent.value ? editorContent.value + '\n\n' : '';
-  
-  streamingAbortController.value = new AbortController();
+  let currentText = editorContent.value;
   
   for (let i = 0; i < chars.length; i++) {
-    // 检查是否被中断
-    if (streamingAbortController.value?.signal.aborted) {
+    if (!isStreaming.value) {
       break;
     }
     
     currentText += chars[i];
     editorContent.value = currentText;
     
-    // 滚动到光标位置
     if (editorRef.value) {
       editorRef.value.scrollTop = editorRef.value.scrollHeight;
     }
     
-    // 模拟打字机效果延迟
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   
   isDirty.value = true;
 };
 
-const streamGenerateArticle = async (
-  title: string,
-  outline: string,
-  requirements: string
-): Promise<string> => {
-  // 这里应该调用后端流式 API
-  // 暂时使用非流式 API 并模拟流式效果
-  const content = await wails.generateArticle(title, outline, requirements);
-  
-  await streamTextToEditor(content, 'article');
-  
-  return content;
-};
-
-const simulateOptimization = async (_request: string) => {
-  const responses: Record<string, string> = {
-    '润色': '正在润色文字，使其更加流畅优美...',
-    '精简': '正在精简内容，保留核心要点...',
-    '扩写': '正在扩写内容，增加细节描述...',
-    '案例': '正在添加相关案例，增强说服力...',
-  };
-
-  const response = responses[_request] || '正在根据您的要求进行优化...';
-  await streamTextToEditor(`\n\n---\n\n**优化说明**: ${response}\n\n`, 'article');
-};
-
 const stopStreaming = () => {
-  if (streamingAbortController.value) {
-    streamingAbortController.value.abort();
-  }
   isStreaming.value = false;
+  isProcessing.value = false;
+
+  // 取消事件订阅
+  if (streamUnsubscribe.value) {
+    try {
+      streamUnsubscribe.value();
+    } catch (e) {
+      console.warn('取消流订阅失败:', e);
+    }
+    streamUnsubscribe.value = null;
+  }
+
+  // 完成流式消息
   sidebarRef.value?.finishStreaming();
 };
 
@@ -640,7 +726,6 @@ const handleOpenRecent = async (path: string): Promise<void> => {
       articleTitle.value = article.title || '';
       editorContent.value = content;
       
-      // 尝试从内容中提取大纲
       const outlineMatch = content.match(/##?\s+.+$/m);
       if (outlineMatch) {
         articleOutline.value = outlineMatch[0];
@@ -649,7 +734,6 @@ const handleOpenRecent = async (path: string): Promise<void> => {
       isDirty.value = false;
       currentStep.value = 0;
       
-      // 清空对话历史
       if (sidebarRef.value) {
         sidebarRef.value.messages = [];
         sidebarRef.value.currentStep = 0;
@@ -810,17 +894,43 @@ const handleKeyDown = (e: KeyboardEvent): void => {
   }
 };
 
+// 页面关闭前警告未保存的更改
+const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+  if (isDirty.value) {
+    e.preventDefault();
+    e.returnValue = '';
+    return '';
+  }
+};
+
 // ============================================
 // 生命周期
 // ============================================
 onMounted(() => {
   document.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('beforeunload', handleBeforeUnload);
   loadAIConfig();
   loadPositioning();
 });
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeyDown);
+  window.removeEventListener('beforeunload', handleBeforeUnload);
+
+  // 停止任何进行中的流式生成
+  if (isStreaming.value) {
+    stopStreaming();
+  }
+
+  // 清理流式订阅
+  if (streamUnsubscribe.value) {
+    try {
+      streamUnsubscribe.value();
+    } catch (e) {
+      console.warn('取消流订阅失败:', e);
+    }
+    streamUnsubscribe.value = null;
+  }
 });
 </script>
 

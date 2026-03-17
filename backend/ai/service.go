@@ -6,29 +6,114 @@ import (
 	"Content-Alchemist/backend/models"
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Service AI 服务
 type Service struct {
-	config *models.AIConfig
+	config       *models.AIConfig
+	httpClient   *http.Client
+	mu           sync.RWMutex
+	// 简单限流：每分钟最多10个请求
+	rateLimiter  chan struct{}
+	rateResetter *time.Ticker
+}
+
+// 单例模式，避免重复创建 HTTP client
+var (
+	defaultHTTPClient *http.Client
+	once              sync.Once
+)
+
+// getDefaultHTTPClient 获取默认 HTTP 客户端（连接复用）
+func getDefaultHTTPClient() *http.Client {
+	once.Do(func() {
+		defaultHTTPClient = &http.Client{
+			Timeout: 120 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        10,
+				MaxIdleConnsPerHost: 5,
+				IdleConnTimeout:     90 * time.Second,
+				DisableCompression:  false,
+			},
+		}
+	})
+	return defaultHTTPClient
 }
 
 // NewService 创建 AI 服务
 func NewService(config *models.AIConfig) *Service {
-	return &Service{
-		config: config,
+	s := &Service{
+		config:       config,
+		httpClient:   getDefaultHTTPClient(),
+		rateLimiter:  make(chan struct{}, 10),
+		rateResetter: time.NewTicker(time.Minute),
+	}
+
+	// 初始填充令牌
+	for i := 0; i < 10; i++ {
+		s.rateLimiter <- struct{}{}
+	}
+
+	// 启动令牌重置协程
+	go s.rateLimitRefiller()
+
+	return s
+}
+
+// rateLimitRefiller 每分钟重置限流令牌
+func (s *Service) rateLimitRefiller() {
+	for range s.rateResetter.C {
+		// 清空并重新填充令牌
+		select {
+		case <-s.rateLimiter:
+		default:
+		}
+		for i := 0; i < 10; i++ {
+			select {
+			case s.rateLimiter <- struct{}{}:
+			default:
+			}
+		}
 	}
 }
 
-// UpdateConfig 更新配置
+// acquireRateLimit 获取一个限流令牌
+func (s *Service) acquireRateLimit(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-s.rateLimiter:
+		return nil
+	}
+}
+
+// Close 关闭服务，清理资源
+func (s *Service) Close() {
+	if s.rateResetter != nil {
+		s.rateResetter.Stop()
+	}
+}
+
+// UpdateConfig 更新配置（线程安全）
 func (s *Service) UpdateConfig(config *models.AIConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.config = config
+}
+
+// GetConfig 获取配置（线程安全）
+func (s *Service) GetConfig() *models.AIConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.config
 }
 
 // Message 聊天消息
@@ -77,10 +162,62 @@ type OutlineResult struct {
 // StreamCallback 流式输出回调函数
 type StreamCallback func(chunk string) error
 
+// validateConfig 验证配置是否有效
+func (s *Service) validateConfig() error {
+	config := s.GetConfig()
+	if config == nil || config.Token == "" {
+		return fmt.Errorf("AI 配置不完整，请先配置 API Token")
+	}
+	return nil
+}
+
+// makeChatRequest 统一的聊天请求方法
+func (s *Service) makeChatRequest(ctx context.Context, messages []Message, stream bool) (*http.Response, error) {
+	config := s.GetConfig()
+	if config == nil {
+		return nil, fmt.Errorf("AI 配置未初始化")
+	}
+
+	reqBody := ChatRequest{
+		Model:       config.Model,
+		Messages:    messages,
+		Temperature: config.Temperature,
+		Stream:      stream,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("序列化请求失败: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", config.BaseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	req.Header.Set("Authorization", "Bearer "+config.Token)
+	req.Header.Set("Accept-Charset", "utf-8")
+	if stream {
+		req.Header.Set("Accept", "text/event-stream; charset=utf-8")
+	} else {
+		req.Header.Set("Accept", "application/json; charset=utf-8")
+	}
+
+	return s.httpClient.Do(req)
+}
+
 // GenerateOutlineWithTitles 根据标题、写作要求和公众号定位生成大纲和候选标题
 func (s *Service) GenerateOutlineWithTitles(title, requirements, positioning string) (*OutlineResult, error) {
-	if s.config == nil || s.config.Token == "" {
-		return nil, fmt.Errorf("AI 配置不完整，请先配置 API Token")
+	if err := s.validateConfig(); err != nil {
+		return nil, err
+	}
+
+	// 限流检查
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.acquireRateLimit(ctx); err != nil {
+		return nil, fmt.Errorf("请求过于频繁，请稍后再试")
 	}
 
 	// 构建完整的提示信息
@@ -95,7 +232,7 @@ func (s *Service) GenerateOutlineWithTitles(title, requirements, positioning str
 		contextParts = append(contextParts, fmt.Sprintf("公众号定位:\n%s", positioning))
 	}
 
-	context := strings.Join(contextParts, "\n\n")
+	contextText := strings.Join(contextParts, "\n\n")
 
 	prompt := fmt.Sprintf(`请根据以下信息，完成两个任务：
 
@@ -129,44 +266,22 @@ func (s *Service) GenerateOutlineWithTitles(title, requirements, positioning str
 
 ===OUTLINE===
 （大纲内容）
-===END OUTLINE===`, context)
+===END OUTLINE===`, contextText)
 
-	reqBody := ChatRequest{
-		Model: s.config.Model,
-		Messages: []Message{
-			{
-				Role:    "system",
-				Content: "你是一个专业的公众号写作专家，擅长创作爆款标题和清晰的文章大纲。",
-			},
-			{
-				Role:    "user",
-				Content: prompt,
-			},
+	messages := []Message{
+		{
+			Role:    "system",
+			Content: "你是一个专业的公众号写作专家，擅长创作爆款标题和清晰的文章大纲。",
 		},
-		Temperature: s.config.Temperature,
-		Stream:      false,
+		{
+			Role:    "user",
+			Content: prompt,
+		},
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	resp, err := s.makeChatRequest(context.Background(), messages, false)
 	if err != nil {
-		return nil, fmt.Errorf("序列化请求失败: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", s.config.BaseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.config.Token)
-
-	client := &http.Client{
-		Timeout: 120 * time.Second,
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("请求失败: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -246,8 +361,8 @@ func parseOutlineResponse(content string) *OutlineResult {
 
 // GenerateArticleFromOutline 根据大纲生成完整文章
 func (s *Service) GenerateArticleFromOutline(title string, outline string, requirements string) (string, error) {
-	if s.config == nil || s.config.Token == "" {
-		return "", fmt.Errorf("AI 配置不完整，请先配置 API Token")
+	if err := s.validateConfig(); err != nil {
+		return "", err
 	}
 
 	prompt := fmt.Sprintf(`请根据以下信息生成一篇完整的公众号文章:
@@ -271,42 +386,20 @@ func (s *Service) GenerateArticleFromOutline(title string, outline string, requi
 
 请直接返回完整的文章内容:`, title, outline, requirements)
 
-	reqBody := ChatRequest{
-		Model: s.config.Model,
-		Messages: []Message{
-			{
-				Role:    "system",
-				Content: "你是一个专业的公众号文章写作专家，擅长根据大纲生成高质量、易读的文章内容。",
-			},
-			{
-				Role:    "user",
-				Content: prompt,
-			},
+	messages := []Message{
+		{
+			Role:    "system",
+			Content: "你是一个专业的公众号文章写作专家，擅长根据大纲生成高质量、易读的文章内容。",
 		},
-		Temperature: s.config.Temperature,
-		Stream:      false,
+		{
+			Role:    "user",
+			Content: prompt,
+		},
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	resp, err := s.makeChatRequest(context.Background(), messages, false)
 	if err != nil {
-		return "", fmt.Errorf("序列化请求失败: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", s.config.BaseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return "", fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.config.Token)
-
-	client := &http.Client{
-		Timeout: 120 * time.Second,
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("请求失败: %w", err)
+		return "", err
 	}
 	defer resp.Body.Close()
 
@@ -336,9 +429,9 @@ func (s *Service) GenerateArticleFromOutline(title string, outline string, requi
 }
 
 // GenerateArticleStream 流式生成文章
-func (s *Service) GenerateArticleStream(title string, outline string, requirements string, callback StreamCallback) error {
-	if s.config == nil || s.config.Token == "" {
-		return fmt.Errorf("AI 配置不完整，请先配置 API Token")
+func (s *Service) GenerateArticleStream(ctx context.Context, title string, outline string, requirements string, callback StreamCallback) error {
+	if err := s.validateConfig(); err != nil {
+		return err
 	}
 
 	prompt := fmt.Sprintf(`请根据以下信息生成一篇完整的公众号文章:
@@ -362,43 +455,20 @@ func (s *Service) GenerateArticleStream(title string, outline string, requiremen
 
 请直接返回完整的文章内容:`, title, outline, requirements)
 
-	reqBody := ChatRequest{
-		Model: s.config.Model,
-		Messages: []Message{
-			{
-				Role:    "system",
-				Content: "你是一个专业的公众号文章写作专家，擅长根据大纲生成高质量、易读的文章内容。",
-			},
-			{
-				Role:    "user",
-				Content: prompt,
-			},
+	messages := []Message{
+		{
+			Role:    "system",
+			Content: "你是一个专业的公众号文章写作专家，擅长根据大纲生成高质量、易读的文章内容。",
 		},
-		Temperature: s.config.Temperature,
-		Stream:      true,
+		{
+			Role:    "user",
+			Content: prompt,
+		},
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	resp, err := s.makeChatRequest(ctx, messages, true)
 	if err != nil {
-		return fmt.Errorf("序列化请求失败: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", s.config.BaseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.config.Token)
-	req.Header.Set("Accept", "text/event-stream")
-
-	client := &http.Client{
-		Timeout: 300 * time.Second,
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("请求失败: %w", err)
+		return err
 	}
 	defer resp.Body.Close()
 
@@ -407,18 +477,18 @@ func (s *Service) GenerateArticleStream(title string, outline string, requiremen
 		return fmt.Errorf("API 返回错误 (状态码 %d): %s", resp.StatusCode, string(body))
 	}
 
-	// 读取 SSE 流
-	reader := bufio.NewReader(resp.Body)
-	for {
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return fmt.Errorf("读取流失败: %w", err)
+	// 读取 SSE 流 - 使用Scanner确保UTF-8正确读取
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 4096), 1024*1024) // 增加缓冲区大小到1MB
+
+	for scanner.Scan() {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
 		}
 
-		line = strings.TrimSpace(line)
+		line := strings.TrimSpace(scanner.Text())
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
@@ -450,13 +520,17 @@ func (s *Service) GenerateArticleStream(title string, outline string, requiremen
 		}
 	}
 
+	if err := scanner.Err(); err != nil && err != io.EOF {
+		return fmt.Errorf("读取流失败: %w", err)
+	}
+
 	return nil
 }
 
 // OptimizeContent 优化文章内容
 func (s *Service) OptimizeContent(content string, optimizeType string, requirements string) (string, error) {
-	if s.config == nil || s.config.Token == "" {
-		return "", fmt.Errorf("AI 配置不完整，请先配置 API Token")
+	if err := s.validateConfig(); err != nil {
+		return "", err
 	}
 
 	var prompt string
@@ -509,42 +583,20 @@ func (s *Service) OptimizeContent(content string, optimizeType string, requireme
 请直接返回优化后的内容：`, content, requirements)
 	}
 
-	reqBody := ChatRequest{
-		Model: s.config.Model,
-		Messages: []Message{
-			{
-				Role:    "system",
-				Content: "你是一个专业的文章编辑，擅长优化和改进文章内容。",
-			},
-			{
-				Role:    "user",
-				Content: prompt,
-			},
+	messages := []Message{
+		{
+			Role:    "system",
+			Content: "你是一个专业的文章编辑，擅长优化和改进文章内容。",
 		},
-		Temperature: s.config.Temperature,
-		Stream:      false,
+		{
+			Role:    "user",
+			Content: prompt,
+		},
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	resp, err := s.makeChatRequest(context.Background(), messages, false)
 	if err != nil {
-		return "", fmt.Errorf("序列化请求失败: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", s.config.BaseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return "", fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.config.Token)
-
-	client := &http.Client{
-		Timeout: 120 * time.Second,
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("请求失败: %w", err)
+		return "", err
 	}
 	defer resp.Body.Close()
 
@@ -575,8 +627,8 @@ func (s *Service) OptimizeContent(content string, optimizeType string, requireme
 
 // GenerateViralTitles 生成爆款标题
 func (s *Service) GenerateViralTitles(content string, positioning string, count int) ([]string, error) {
-	if s.config == nil || s.config.Token == "" {
-		return nil, fmt.Errorf("AI 配置不完整，请先配置 API Token")
+	if err := s.validateConfig(); err != nil {
+		return nil, err
 	}
 
 	if count <= 0 {
@@ -608,42 +660,28 @@ func (s *Service) GenerateViralTitles(content string, positioning string, count 
 3. 标题3
 ...`, count, content, positioning)
 
-	reqBody := ChatRequest{
-		Model: s.config.Model,
-		Messages: []Message{
-			{
-				Role:    "system",
-				Content: "你是一个专业的标题创作专家，擅长创作高点击率的爆款标题。",
-			},
-			{
-				Role:    "user",
-				Content: prompt,
-			},
+	config := s.GetConfig()
+	messages := []Message{
+		{
+			Role:    "system",
+			Content: "你是一个专业的标题创作专家，擅长创作高点击率的爆款标题。",
 		},
-		Temperature: s.config.Temperature + 0.2, // 稍微提高温度以增加创意
-		Stream:      false,
+		{
+			Role:    "user",
+			Content: prompt,
+		},
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
+	// 使用临时增加温度的配置
+	tempConfig := *config
+	tempConfig.Temperature = config.Temperature + 0.2
+	origConfig := s.config
+	s.config = &tempConfig
+	defer func() { s.config = origConfig }()
+
+	resp, err := s.makeChatRequest(context.Background(), messages, false)
 	if err != nil {
-		return nil, fmt.Errorf("序列化请求失败: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", s.config.BaseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("创建请求失败: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+s.config.Token)
-
-	client := &http.Client{
-		Timeout: 60 * time.Second,
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("请求失败: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
