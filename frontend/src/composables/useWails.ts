@@ -232,8 +232,39 @@ export function useWails() {
   };
 
   /**
+   * 优化文章内容
+   * optimizeType: 优化类型 (polish:润色, expand:扩写, simplify:精简, example:添加案例)
+   * requirements: 额外要求
+   */
+  const optimizeContent = async (
+    content: string,
+    optimizeType: string,
+    requirements?: string
+  ): Promise<string> => {
+    return wrapAsync(async () => {
+      return await App.OptimizeContent(content, optimizeType, requirements || '');
+    });
+  };
+
+  /**
+   * 生成爆款标题
+   * content: 文章内容
+   * positioning: 公众号定位
+   * count: 生成数量（默认5个）
+   */
+  const generateViralTitles = async (
+    content: string,
+    positioning?: string,
+    count?: number
+  ): Promise<string[]> => {
+    return wrapAsync(async () => {
+      return await App.GenerateViralTitles(content, positioning || '', count || 5);
+    });
+  };
+
+  /**
    * 智能保存文章
-   * 如果未保存到本地文件，则根据标题自动生成文件名
+   * 如果未保存到本地文件，则根据标题自动生成文件名并弹出对话框
    * overwrite: 是否强制覆盖已存在的文件
    */
   const saveArticleWithSmartNaming = async (
@@ -294,6 +325,8 @@ export function useWails() {
     // AI生成
     generateOutline,
     generateArticle,
+    optimizeContent,
+    generateViralTitles,
 
     // 智能保存
     saveArticleWithSmartNaming,

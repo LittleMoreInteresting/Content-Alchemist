@@ -13,20 +13,16 @@
 
     <!-- 主体区域 -->
     <div class="main-container">
-      <!-- 左侧边栏：写作助手 -->
+      <!-- 左侧边栏：对话式写作助手 -->
       <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
-        <WritingSidebar
+        <WritingChatSidebar
           ref="sidebarRef"
-          v-model:title="articleTitle"
-          v-model:outline="articleOutline"
-          v-model:requirements="writingRequirements"
-          :positioning="savedPositioning"
-          :is-generating-outline="isGeneratingOutline"
-          :is-generating-article="isGeneratingArticle"
-          @generate-outline="handleGenerateOutline"
-          @generate-article="handleGenerateArticle"
+          :article-title="articleTitle"
+          :is-processing="isProcessing"
+          @send-message="handleSendMessage"
+          @quick-action="handleQuickAction"
           @open-recent="handleOpenRecent"
-          @error="handleError"
+          @update:step="handleStepChange"
         />
       </aside>
 
@@ -36,9 +32,20 @@
         <div class="editor-pane">
           <div class="pane-header">
             <span class="pane-title">✏️ 编辑</span>
-            <span class="pane-subtitle" v-if="!articleOutline">输入大纲或文章内容</span>
-            <span class="pane-subtitle" v-else-if="!articleContent">基于大纲生成文章</span>
-            <span class="pane-subtitle" v-else>编辑文章内容</span>
+            <div class="pane-actions">
+              <button
+                v-if="isStreaming"
+                class="pane-btn stop-btn"
+                @click="stopStreaming"
+                title="停止生成"
+              >
+                ⏹ 停止
+              </button>
+              <span v-if="isStreaming" class="streaming-status">
+                <span class="streaming-dot"></span>
+                生成中...
+              </span>
+            </div>
           </div>
           <div class="editor-content">
             <textarea
@@ -51,6 +58,7 @@
           </div>
           <div class="editor-statusbar">
             <span class="word-count">字数: {{ wordCount }}</span>
+            <span class="step-info">{{ currentStepInfo }}</span>
             <span v-if="isDirty" class="save-status unsaved">未保存</span>
             <span v-else-if="isSaving" class="save-status saving">保存中...</span>
             <span v-else class="save-status saved">已保存</span>
@@ -69,14 +77,6 @@
                 title="切换手机端预览"
               >
                 📱 手机端
-              </button>
-              <button
-                class="pane-btn"
-                :class="{ active: showOutline }"
-                @click="showOutline = !showOutline"
-                title="显示/隐藏目录"
-              >
-                目录
               </button>
               <button
                 class="pane-btn copy-btn"
@@ -98,20 +98,6 @@
         </div>
       </div>
     </div>
-
-    <!-- 全局 Loading 遮罩 -->
-    <div v-if="isLoading" class="global-loading">
-      <div class="loading-spinner-large"></div>
-      <p class="loading-text">{{ loadingText }}</p>
-    </div>
-
-    <!-- 标题选择弹窗 -->
-    <TitleSelectorModal
-      v-model:visible="showTitleSelector"
-      :titles="candidateTitles"
-      :original-title="articleTitle"
-      @select="handleTitleSelected"
-    />
 
     <!-- 设置弹窗 -->
     <SettingsModal
@@ -135,8 +121,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import MarkdownIt from 'markdown-it';
 import FileToolbar from './FileToolbar.vue';
-import WritingSidebar from './WritingSidebar.vue';
-import TitleSelectorModal from './TitleSelectorModal.vue';
+import WritingChatSidebar from './WritingChatSidebar.vue';
 import SettingsModal, { type AIConfig } from './SettingsModal.vue';
 import { useWails, FileError } from '../composables/useWails';
 
@@ -154,41 +139,39 @@ const md = new MarkdownIt({
 // 状态
 // ============================================
 const wails = useWails();
-const sidebarRef = ref<InstanceType<typeof WritingSidebar> | null>(null);
+const sidebarRef = ref<InstanceType<typeof WritingChatSidebar> | null>(null);
+const editorRef = ref<HTMLTextAreaElement | null>(null);
 
 // 文章状态
 const articleTitle = ref('');
 const articleOutline = ref('');
-const articleContent = ref('');
 const editorContent = ref('');
-const writingRequirements = ref('');
-const savedPositioning = ref('');
 const currentUUID = ref('');
 const filePath = ref('');
-const candidateTitles = ref<string[]>([]);
+
+// 写作流程状态
+const currentStep = ref(0);
+const isProcessing = ref(false);
+const isStreaming = ref(false);
+const streamingAbortController = ref<AbortController | null>(null);
 
 // UI 状态
 const sidebarCollapsed = ref(false);
-const showOutline = ref(false);
 const showSettings = ref(false);
-const showTitleSelector = ref(false);
 const errorMessage = ref('');
 const isSaving = ref(false);
 const isDirty = ref(false);
-const isGeneratingOutline = ref(false);
-const isGeneratingArticle = ref(false);
-const isLoading = ref(false);
-const loadingText = ref('');
 const isMobilePreview = ref(false);
-const previewRef = ref<HTMLDivElement | null>(null);
 
 // AI 配置
 const aiConfig = ref<AIConfig>({
   baseUrl: 'https://api.deepseek.com/v1',
   token: '',
   temperature: 0.7,
-  model: 'deepseek-chat'
+  model: 'deepseek-chat',
 });
+
+const savedPositioning = ref('');
 
 // ============================================
 // 计算属性
@@ -197,16 +180,14 @@ const canSave = computed(() => {
   return isDirty.value && !isSaving.value && articleTitle.value !== '';
 });
 
-// 字数统计
 const wordCount = computed(() => {
   if (!editorContent.value) return 0;
-  // 中文字符 + 英文单词
   const chinese = (editorContent.value.match(/[\u4e00-\u9fa5]/g) || []).length;
   const english = editorContent.value
     .replace(/[\u4e00-\u9fa5]/g, '')
     .trim()
     .split(/\s+/)
-    .filter(w => w.length > 0).length;
+    .filter((w) => w.length > 0).length;
   return chinese + english;
 });
 
@@ -214,53 +195,32 @@ const renderedContent = computed(() => {
   return md.render(editorContent.value);
 });
 
-// 微信公众号格式化内容
 const wechatFormattedContent = computed(() => {
   let content = md.render(editorContent.value);
-
-  // 为代码块添加微信公众号样式
   content = content.replace(
     /<pre><code[^>]*>([\s\S]*?)<\/code><\/pre>/g,
     '<pre class="wechat-code-block"><code>$1</code></pre>'
   );
-
-  // 为行内代码添加样式
   content = content.replace(
     /<code>([^<]+)<\/code>(?![\s\S]*<\/pre>)/g,
     '<code class="wechat-inline-code">$1</code>'
   );
-
   return content;
 });
 
-// 监听编辑器内容变化
-watch(editorContent, (newValue, oldValue) => {
-  if (oldValue !== undefined && newValue !== oldValue) {
-    isDirty.value = true;
-    
-    // 更新大纲或文章内容
-    if (!articleContent.value && articleOutline.value) {
-      // 如果还没有正式生成文章，编辑的是大纲
-      articleOutline.value = newValue;
-    } else {
-      // 编辑的是文章内容
-      articleContent.value = newValue;
-    }
-  }
+const currentStepInfo = computed(() => {
+  const stepNames = ['设定主题', '生成框架', '生成内容', '优化调整', '生成标题'];
+  return `步骤 ${currentStep.value + 1}/5: ${stepNames[currentStep.value]}`;
 });
 
 // ============================================
-// Loading 控制
+// 监听编辑器内容变化
 // ============================================
-const showLoading = (text: string) => {
-  loadingText.value = text;
-  isLoading.value = true;
-};
-
-const hideLoading = () => {
-  isLoading.value = false;
-  loadingText.value = '';
-};
+watch(editorContent, (newValue, oldValue) => {
+  if (oldValue !== undefined && newValue !== oldValue) {
+    isDirty.value = true;
+  }
+});
 
 // ============================================
 // 保存功能
@@ -282,23 +242,18 @@ const handleSave = async (overwrite = false): Promise<void> => {
       currentUUID.value = result.uuid;
       filePath.value = result.filePath;
       isDirty.value = false;
-      // 刷新最近文章列表
       sidebarRef.value?.loadRecentArticles();
     }
   } catch (err) {
-    // 检查是否是文件存在需要确认的错误
     if (err instanceof FileError && err.code === 'FILE_EXISTS_CONFIRM') {
-      // 提取文件路径
       const filePathMatch = err.message.match(/文件已存在: (.+)$/);
       const existingFilePath = filePathMatch ? filePathMatch[1] : '';
       
-      // 显示确认对话框
       const confirmed = window.confirm(
         `文件 "${existingFilePath}" 已存在。\n\n是否覆盖保存？\n（旧版本将被替换）`
       );
       
       if (confirmed) {
-        // 用户确认覆盖，重新调用保存并设置 overwrite 为 true
         await handleSave(true);
         return;
       }
@@ -311,76 +266,11 @@ const handleSave = async (overwrite = false): Promise<void> => {
   }
 };
 
-// ============================================
-// 生成大纲
-// ============================================
-const handleGenerateOutline = async (): Promise<void> => {
-  if (!articleTitle.value) {
-    handleError('请先输入文章标题');
-    return;
-  }
-
-  isGeneratingOutline.value = true;
-  showLoading('正在生成大纲和候选标题...');
-
-  try {
-    // 调用生成大纲接口，传入标题、写作要求、公众号定位
-    const result = await wails.generateOutline(
-      articleTitle.value,
-      writingRequirements.value,
-      savedPositioning.value
-    );
-    
-    if (result) {
-      // 保存候选标题
-      candidateTitles.value = result.titles;
-      
-      // 保存大纲
-      articleOutline.value = result.outline;
-      
-      // 显示标题选择弹窗
-      if (candidateTitles.value.length > 0) {
-        showTitleSelector.value = true;
-      } else {
-        // 如果没有候选标题，直接显示大纲
-        editorContent.value = articleOutline.value;
-        isDirty.value = true;
-        // 自动保存
-        await autoSave();
-      }
-    }
-  } catch (err) {
-    console.error('生成大纲失败:', err);
-    handleError(err instanceof Error ? err.message : '生成大纲失败');
-  } finally {
-    isGeneratingOutline.value = false;
-    hideLoading();
-  }
-};
-
-// ============================================
-// 标题选择处理
-// ============================================
-const handleTitleSelected = async (selectedTitle: string): Promise<void> => {
-  // 更新文章标题
-  articleTitle.value = selectedTitle;
-  
-  // 显示大纲到编辑器
-  editorContent.value = articleOutline.value;
-  isDirty.value = true;
-  
-  // 自动保存
-  await autoSave();
-};
-
-// ============================================
-// 自动保存
-// ============================================
 const autoSave = async (overwrite = false): Promise<void> => {
   if (!articleTitle.value || !editorContent.value) return;
-  
+
   isSaving.value = true;
-  
+
   try {
     const result = await wails.saveArticleWithSmartNaming(
       currentUUID.value,
@@ -393,70 +283,343 @@ const autoSave = async (overwrite = false): Promise<void> => {
       currentUUID.value = result.uuid;
       filePath.value = result.filePath;
       isDirty.value = false;
-      // 刷新最近文章列表
       sidebarRef.value?.loadRecentArticles();
     }
   } catch (err) {
-    // 自动保存时如果文件存在，自动覆盖（不打扰用户）
     if (err instanceof FileError && err.code === 'FILE_EXISTS_CONFIRM') {
       await autoSave(true);
       return;
     }
-    
     console.error('自动保存失败:', err);
-    // 自动保存失败不提示错误，避免打扰用户
   } finally {
     isSaving.value = false;
   }
 };
 
 // ============================================
-// 文章生成处理
+// 对话消息处理
 // ============================================
-const handleGenerateArticle = async (): Promise<void> => {
-  if (!articleTitle.value) {
-    handleError('请先输入文章标题');
-    return;
-  }
-
-  if (!articleOutline.value) {
-    handleError('请先生成大纲');
-    return;
-  }
-
-  isGeneratingArticle.value = true;
-  showLoading('正在生成文章内容，请稍候...');
+const handleSendMessage = async (message: string, step: number) => {
+  isProcessing.value = true;
 
   try {
-    // 合并写作要求和公众号定位
-    const combinedRequirements = [
-      writingRequirements.value,
-      savedPositioning.value ? `公众号定位：${savedPositioning.value}` : '',
-    ].filter(Boolean).join('\n\n');
+    // 解析用户输入
+    const parsedInput = parseUserInput(message, step);
+    
+    if (step === 0) {
+      // 步骤1: 设定主题
+      await handleStep1_Setup(parsedInput);
+    } else if (step === 1) {
+      // 步骤2: 生成框架（大纲）
+      await handleStep2_GenerateOutline(parsedInput);
+    } else if (step === 2) {
+      // 步骤3: 生成内容
+      await handleStep3_GenerateArticle(parsedInput);
+    } else if (step === 3) {
+      // 步骤4: 优化调整
+      await handleStep4_Optimize(parsedInput);
+    } else if (step === 4) {
+      // 步骤5: 生成标题
+      await handleStep5_GenerateTitles(parsedInput);
+    }
+  } catch (err) {
+    console.error('处理消息失败:', err);
+    handleError(err instanceof Error ? err.message : '处理失败');
+    sidebarRef.value?.addMessage('assistant', `❌ ${err instanceof Error ? err.message : '处理失败'}`);
+  } finally {
+    isProcessing.value = false;
+  }
+};
 
-    const content = await wails.generateArticle(
+// 解析用户输入
+const parseUserInput = (message: string, step: number) => {
+  const result: {
+    title?: string;
+    requirements?: string;
+    outline?: string;
+    optimizationType?: string;
+    optimizationRequest?: string;
+  } = {};
+
+  if (step === 0) {
+    // 提取标题
+    const titleMatch = message.match(/标题[：:]\s*(.+)/);
+    if (titleMatch) {
+      result.title = titleMatch[1].trim();
+    } else {
+      // 如果没有明确标记，使用第一行作为标题
+      const firstLine = message.split('\n')[0].trim();
+      if (firstLine.length < 50) {
+        result.title = firstLine;
+      }
+    }
+
+    // 提取要求
+    const reqMatch = message.match(/要求[：:]\s*([\s\S]+)/);
+    if (reqMatch) {
+      result.requirements = reqMatch[1].trim();
+    } else {
+      result.requirements = message.replace(/标题[：:]\s*.+/, '').trim();
+    }
+  }
+
+  return result;
+};
+
+// 步骤1: 设定主题
+const handleStep1_Setup = async (input: { title?: string; requirements?: string }) => {
+  if (input.title) {
+    articleTitle.value = input.title;
+  }
+
+  // 添加 AI 回复
+  sidebarRef.value?.addMessage(
+    'assistant',
+    `✅ 已记录您的创作需求\n\n**标题**: ${articleTitle.value || '待定'}\n\n**要求**: ${input.requirements || '无特殊要求'}\n\n接下来可以：\n1. 点击「生成大纲」按钮生成文章框架\n2. 继续补充更多要求`
+  );
+
+  // 自动进入下一步
+  if (articleTitle.value) {
+    currentStep.value = 1;
+    sidebarRef.value?.nextStep();
+  }
+};
+
+// 步骤2: 生成大纲
+const handleStep2_GenerateOutline = async (input: any) => {
+  sidebarRef.value?.addStreamingMessage('🤔 正在思考文章结构...');
+  isStreaming.value = true;
+
+  try {
+    const result = await wails.generateOutline(
+      articleTitle.value,
+      input.requirements || '',
+      savedPositioning.value
+    );
+
+    if (result) {
+      articleOutline.value = result.outline;
+      
+      // 流式显示大纲
+      await streamTextToEditor(result.outline, 'outline');
+
+      sidebarRef.value?.finishStreaming();
+      sidebarRef.value?.updateStreamingMessage(
+        `✅ 大纲已生成！\n\n已为您生成 ${result.titles?.length || 0} 个候选标题，大纲内容已显示在编辑区。\n\n您可以：\n1. 直接在编辑区修改大纲\n2. 点击「生成文章」继续创作\n3. 提出修改意见重新生成`
+      );
+
+      // 保存候选标题供后续使用
+      if (result.titles && result.titles.length > 0) {
+        (window as any).candidateTitles = result.titles;
+      }
+
+      // 自动进入下一步
+      currentStep.value = 2;
+      sidebarRef.value?.nextStep();
+    }
+  } catch (err) {
+    sidebarRef.value?.finishStreaming();
+    sidebarRef.value?.addMessage('assistant', `❌ 生成大纲失败: ${err instanceof Error ? err.message : '未知错误'}`);
+  } finally {
+    isStreaming.value = false;
+  }
+};
+
+// 步骤3: 生成文章
+const handleStep3_GenerateArticle = async (input: any) => {
+  if (!articleOutline.value) {
+    sidebarRef.value?.addMessage('assistant', '⚠️ 请先生成文章大纲');
+    return;
+  }
+
+  sidebarRef.value?.addStreamingMessage('✍️ 正在撰写文章内容...');
+  isStreaming.value = true;
+
+  try {
+    const combinedRequirements = [
+      input.requirements,
+      savedPositioning.value ? `公众号定位：${savedPositioning.value}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    // 使用流式生成
+    await streamGenerateArticle(
       articleTitle.value,
       articleOutline.value,
       combinedRequirements
     );
 
-    if (content) {
-      // 添加标题到文章内容
-      const fullContent = `# ${articleTitle.value}\n\n${content}`;
-      articleContent.value = fullContent;
-      editorContent.value = fullContent;
-      isDirty.value = true;
+    sidebarRef.value?.finishStreaming();
+    sidebarRef.value?.updateStreamingMessage(
+      `✅ 文章生成完成！\n\n文章内容已显示在编辑区。您可以：\n1. 在编辑区修改完善\n2. 使用「优化调整」功能改进\n3. 继续生成更多内容`
+    );
+
+    // 自动进入下一步
+    currentStep.value = 3;
+    sidebarRef.value?.nextStep();
+  } catch (err) {
+    sidebarRef.value?.finishStreaming();
+    sidebarRef.value?.addMessage('assistant', `❌ 生成文章失败: ${err instanceof Error ? err.message : '未知错误'}`);
+  } finally {
+    isStreaming.value = false;
+  }
+};
+
+// 步骤4: 优化调整
+const handleStep4_Optimize = async (input: any) => {
+  const message = input.optimizationRequest || '请润色优化这篇文章';
+  
+  sidebarRef.value?.addStreamingMessage('💎 正在优化文章内容...');
+  isStreaming.value = true;
+
+  try {
+    // 这里可以调用不同的优化 API
+    // 暂时使用模拟的流式输出
+    await simulateOptimization(message);
+
+    sidebarRef.value?.finishStreaming();
+    sidebarRef.value?.updateStreamingMessage(
+      `✅ 优化完成！\n\n您还可以：\n1. 继续提出优化意见\n2. 生成爆款标题\n3. 保存文章`
+    );
+
+    // 自动进入下一步
+    currentStep.value = 4;
+    sidebarRef.value?.nextStep();
+  } catch (err) {
+    sidebarRef.value?.finishStreaming();
+    sidebarRef.value?.addMessage('assistant', `❌ 优化失败: ${err instanceof Error ? err.message : '未知错误'}`);
+  } finally {
+    isStreaming.value = false;
+  }
+};
+
+// 步骤5: 生成标题
+const handleStep5_GenerateTitles = async (input: any) => {
+  sidebarRef.value?.addStreamingMessage('🎯 正在生成爆款标题...');
+  isStreaming.value = true;
+
+  try {
+    const result = await wails.generateOutline(
+      articleTitle.value,
+      '生成5个更具吸引力的爆款标题，要求：' + (input.requirements || '吸睛、有悬念、符合公众号风格'),
+      savedPositioning.value
+    );
+
+    if (result && result.titles) {
+      const titlesText = result.titles.map((t: string, i: number) => `${i + 1}. ${t}`).join('\n');
       
-      // 生成文章后自动保存
-      await autoSave();
+      sidebarRef.value?.finishStreaming();
+      sidebarRef.value?.updateStreamingMessage(
+        `✅ 爆款标题生成完成！\n\n候选标题：\n${titlesText}\n\n您可以选择一个应用到文章中。`
+      );
     }
   } catch (err) {
-    console.error('生成文章失败:', err);
-    handleError(err instanceof Error ? err.message : '生成文章失败');
+    sidebarRef.value?.finishStreaming();
+    sidebarRef.value?.addMessage('assistant', `❌ 生成标题失败: ${err instanceof Error ? err.message : '未知错误'}`);
   } finally {
-    isGeneratingArticle.value = false;
-    hideLoading();
+    isStreaming.value = false;
   }
+};
+
+// ============================================
+// 流式输出处理
+// ============================================
+const streamTextToEditor = async (text: string, _type: 'outline' | 'article') => {
+  const chars = text.split('');
+  let currentText = editorContent.value ? editorContent.value + '\n\n' : '';
+  
+  streamingAbortController.value = new AbortController();
+  
+  for (let i = 0; i < chars.length; i++) {
+    // 检查是否被中断
+    if (streamingAbortController.value?.signal.aborted) {
+      break;
+    }
+    
+    currentText += chars[i];
+    editorContent.value = currentText;
+    
+    // 滚动到光标位置
+    if (editorRef.value) {
+      editorRef.value.scrollTop = editorRef.value.scrollHeight;
+    }
+    
+    // 模拟打字机效果延迟
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  
+  isDirty.value = true;
+};
+
+const streamGenerateArticle = async (
+  title: string,
+  outline: string,
+  requirements: string
+): Promise<string> => {
+  // 这里应该调用后端流式 API
+  // 暂时使用非流式 API 并模拟流式效果
+  const content = await wails.generateArticle(title, outline, requirements);
+  
+  await streamTextToEditor(content, 'article');
+  
+  return content;
+};
+
+const simulateOptimization = async (_request: string) => {
+  const responses: Record<string, string> = {
+    '润色': '正在润色文字，使其更加流畅优美...',
+    '精简': '正在精简内容，保留核心要点...',
+    '扩写': '正在扩写内容，增加细节描述...',
+    '案例': '正在添加相关案例，增强说服力...',
+  };
+
+  const response = responses[_request] || '正在根据您的要求进行优化...';
+  await streamTextToEditor(`\n\n---\n\n**优化说明**: ${response}\n\n`, 'article');
+};
+
+const stopStreaming = () => {
+  if (streamingAbortController.value) {
+    streamingAbortController.value.abort();
+  }
+  isStreaming.value = false;
+  sidebarRef.value?.finishStreaming();
+};
+
+// ============================================
+// 快捷指令处理
+// ============================================
+const handleQuickAction = (action: string, _step: number) => {
+  switch (action) {
+    case 'generate-outline':
+      handleStep2_GenerateOutline({});
+      break;
+    case 'generate-article':
+      handleStep3_GenerateArticle({});
+      break;
+    case 'polish':
+      handleStep4_Optimize({ optimizationRequest: '润色' });
+      break;
+    case 'expand':
+      handleStep4_Optimize({ optimizationRequest: '扩写' });
+      break;
+    case 'simplify':
+      handleStep4_Optimize({ optimizationRequest: '精简' });
+      break;
+    case 'add-example':
+      handleStep4_Optimize({ optimizationRequest: '案例' });
+      break;
+    case 'generate-titles':
+      handleStep5_GenerateTitles({});
+      break;
+  }
+};
+
+// ============================================
+// 步骤变化处理
+// ============================================
+const handleStepChange = (step: number) => {
+  currentStep.value = step;
 };
 
 // ============================================
@@ -470,13 +633,12 @@ const handleOpenRecent = async (path: string): Promise<void> => {
 
   try {
     const { article, content } = await wails.readArticle(path);
-    
+
     if (article) {
       currentUUID.value = article.uuid;
       filePath.value = article.filePath;
       articleTitle.value = article.title || '';
       editorContent.value = content;
-      articleContent.value = content;
       
       // 尝试从内容中提取大纲
       const outlineMatch = content.match(/##?\s+.+$/m);
@@ -485,6 +647,13 @@ const handleOpenRecent = async (path: string): Promise<void> => {
       }
       
       isDirty.value = false;
+      currentStep.value = 0;
+      
+      // 清空对话历史
+      if (sidebarRef.value) {
+        sidebarRef.value.messages = [];
+        sidebarRef.value.currentStep = 0;
+      }
     }
   } catch (err) {
     console.error('打开文章失败:', err);
@@ -550,17 +719,11 @@ const handleError = (message: string): void => {
 // ============================================
 const copyToClipboard = async (): Promise<void> => {
   try {
-    // 创建内联样式（公众号编辑器不支持外部style标签）
     const articleContent = wechatFormattedContent.value;
-
-    // 创建临时元素用于复制
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = articleContent;
-
-    // 应用内联样式到元素
     applyInlineStyles(tempDiv);
 
-    // 设置临时元素样式以便复制
     tempDiv.style.cssText = `
       font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', -apple-system-font, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
       font-size: 15px;
@@ -571,23 +734,19 @@ const copyToClipboard = async (): Promise<void> => {
       max-width: 100%;
     `;
 
-    // 添加到DOM（不可见）
     tempDiv.style.position = 'fixed';
     tempDiv.style.left = '-9999px';
     tempDiv.style.top = '-9999px';
     document.body.appendChild(tempDiv);
 
-    // 选择内容
     const selection = window.getSelection();
     const range = document.createRange();
     range.selectNodeContents(tempDiv);
     selection?.removeAllRanges();
     selection?.addRange(range);
 
-    // 执行复制
     document.execCommand('copy');
 
-    // 清理
     selection?.removeAllRanges();
     document.body.removeChild(tempDiv);
 
@@ -598,50 +757,45 @@ const copyToClipboard = async (): Promise<void> => {
   }
 };
 
-// 应用内联样式到元素（递归）
 const applyInlineStyles = (element: HTMLElement): void => {
   const styleMap: Record<string, string> = {
-    'H1': 'font-size: 26px; font-weight: 700; margin: 30px 0 24px; line-height: 1.4; color: #1e40af; text-align: center; padding: 20px; background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 8px; position: relative; letter-spacing: 1px;',
-    'H2': 'font-size: 20px; font-weight: 600; margin: 32px 0 20px; padding: 12px 16px; background: linear-gradient(90deg, rgba(124, 58, 237, 0.1) 0%, transparent 100%); border-left: 4px solid #7c3aed; border-radius: 0 8px 8px 0; line-height: 1.4; color: #6d28d9; position: relative;',
-    'H3': 'font-size: 17px; font-weight: 600; margin: 26px 0 14px; padding: 8px 0 8px 14px; border-left: 3px solid #0891b2; color: #0e7490; background: linear-gradient(90deg, rgba(8, 145, 178, 0.08) 0%, transparent 100%);',
-    'H4': 'font-size: 15px; font-weight: 600; margin: 20px 0 12px; color: #ea580c; padding: 6px 0 6px 12px; border-left: 2px solid #ea580c; background: linear-gradient(90deg, rgba(234, 88, 12, 0.08) 0%, transparent 100%);',
-    'H5': 'font-size: 14px; font-weight: 600; margin: 16px 0 10px; color: #4b5563;',
-    'H6': 'font-size: 14px; font-weight: 600; margin: 16px 0 10px; color: #4b5563;',
-    'P': 'margin: 16px 0; text-align: justify; text-indent: 2em; color: #374151;',
-    'A': 'color: #2563eb; text-decoration: none; border-bottom: 1px solid rgba(37, 99, 235, 0.4);',
-    'IMG': 'max-width: 100%; height: auto; margin: 24px 0; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); display: block;',
-    'BLOCKQUOTE': 'margin: 24px 0; padding: 20px 24px 20px 48px; background: #f3f4f6; border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 8px; color: #4c1d95; position: relative; font-family: monospace;',
-    'UL': 'margin: 18px 0; padding-left: 24px; color: #374151;',
-    'OL': 'margin: 18px 0; padding-left: 24px; color: #374151;',
-    'LI': 'margin: 12px 0;',
-    'TABLE': 'width: 100%; border-collapse: separate; border-spacing: 0; margin: 24px 0; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb; background: #ffffff; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);',
-    'TH': 'background: linear-gradient(180deg, #f9fafb 0%, #f3f4f6 100%); color: #1e40af; font-weight: 600; padding: 14px 16px; text-align: left; border: none; border-bottom: 1px solid #e5e7eb; font-family: monospace; font-size: 13px;',
-    'TD': 'border: none; border-bottom: 1px solid #f3f4f6; padding: 12px 16px; text-align: left; color: #374151;',
-    'HR': 'border: none; height: 1px; background: linear-gradient(90deg, transparent 0%, rgba(59, 130, 246, 0.3) 20%, rgba(124, 58, 237, 0.4) 50%, rgba(59, 130, 246, 0.3) 80%, transparent 100%); margin: 36px 0; position: relative;',
-    'STRONG': 'font-weight: 700; color: #ea580c;',
-    'EM': 'font-style: italic; color: #6b7280;',
-    'CODE': 'background: #1e1e2e; padding: 2px 8px; border-radius: 4px; font-family: monospace; font-size: 0.88em; color: #a6e3a1; border: 1px solid #313244;',
-    'PRE': 'background: #0d1117; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin: 24px 0; overflow-x: auto; font-family: monospace; font-size: 13px; line-height: 1.7; color: #e6edf3; position: relative; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);',
+    H1: 'font-size: 26px; font-weight: 700; margin: 30px 0 24px; line-height: 1.4; color: #1e40af; text-align: center; padding: 20px; background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 8px; position: relative; letter-spacing: 1px;',
+    H2: 'font-size: 20px; font-weight: 600; margin: 32px 0 20px; padding: 12px 16px; background: linear-gradient(90deg, rgba(124, 58, 237, 0.1) 0%, transparent 100%); border-left: 4px solid #7c3aed; border-radius: 0 8px 8px 0; line-height: 1.4; color: #6d28d9; position: relative;',
+    H3: 'font-size: 17px; font-weight: 600; margin: 26px 0 14px; padding: 8px 0 8px 14px; border-left: 3px solid #0891b2; color: #0e7490; background: linear-gradient(90deg, rgba(8, 145, 178, 0.08) 0%, transparent 100%);',
+    H4: 'font-size: 15px; font-weight: 600; margin: 20px 0 12px; color: #ea580c; padding: 6px 0 6px 12px; border-left: 2px solid #ea580c; background: linear-gradient(90deg, rgba(234, 88, 12, 0.08) 0%, transparent 100%);',
+    H5: 'font-size: 14px; font-weight: 600; margin: 16px 0 10px; color: #4b5563;',
+    H6: 'font-size: 14px; font-weight: 600; margin: 16px 0 10px; color: #4b5563;',
+    P: 'margin: 16px 0; text-align: justify; text-indent: 2em; color: #374151;',
+    A: 'color: #2563eb; text-decoration: none; border-bottom: 1px solid rgba(37, 99, 235, 0.4);',
+    IMG: 'max-width: 100%; height: auto; margin: 24px 0; border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1); display: block;',
+    BLOCKQUOTE: 'margin: 24px 0; padding: 20px 24px 20px 48px; background: #f3f4f6; border: 1px solid rgba(124, 58, 237, 0.2); border-radius: 8px; color: #4c1d95; position: relative; font-family: monospace;',
+    UL: 'margin: 18px 0; padding-left: 24px; color: #374151;',
+    OL: 'margin: 18px 0; padding-left: 24px; color: #374151;',
+    LI: 'margin: 12px 0;',
+    TABLE: 'width: 100%; border-collapse: separate; border-spacing: 0; margin: 24px 0; border-radius: 8px; overflow: hidden; border: 1px solid #e5e7eb; background: #ffffff; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);',
+    TH: 'background: linear-gradient(180deg, #f9fafb 0%, #f3f4f6 100%); color: #1e40af; font-weight: 600; padding: 14px 16px; text-align: left; border: none; border-bottom: 1px solid #e5e7eb; font-family: monospace; font-size: 13px;',
+    TD: 'border: none; border-bottom: 1px solid #f3f4f6; padding: 12px 16px; text-align: left; color: #374151;',
+    HR: 'border: none; height: 1px; background: linear-gradient(90deg, transparent 0%, rgba(59, 130, 246, 0.3) 20%, rgba(124, 58, 237, 0.4) 50%, rgba(59, 130, 246, 0.3) 80%, transparent 100%); margin: 36px 0; position: relative;',
+    STRONG: 'font-weight: 700; color: #ea580c;',
+    EM: 'font-style: italic; color: #6b7280;',
+    CODE: 'background: #1e1e2e; padding: 2px 8px; border-radius: 4px; font-family: monospace; font-size: 0.88em; color: #a6e3a1; border: 1px solid #313244;',
+    PRE: 'background: #0d1117; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin: 24px 0; overflow-x: auto; font-family: monospace; font-size: 13px; line-height: 1.7; color: #e6edf3; position: relative; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);',
   };
 
-  // 应用当前元素的样式
   const tagName = element.tagName;
   if (styleMap[tagName]) {
     element.style.cssText = styleMap[tagName] + (element.style.cssText ? '; ' + element.style.cssText : '');
   }
 
-  // 处理代码块特殊样式
   if (element.tagName === 'PRE' && element.classList.contains('wechat-code-block')) {
     element.style.cssText = 'background: #1e1e1e; border: none; border-radius: 8px; padding: 16px; margin: 20px 0; overflow-x: auto; font-family: "SF Mono", Monaco, Consolas, monospace; font-size: 14px; line-height: 1.6; color: #d4d4d4;';
   }
 
-  // 处理行内代码
   if (element.tagName === 'CODE' && element.classList.contains('wechat-inline-code')) {
     element.style.cssText = 'background: #f1f3f4; padding: 2px 8px; border-radius: 4px; font-family: monospace; font-size: 0.9em; color: #e83e8c; border: 1px solid #e8e8e8;';
   }
 
-  // 递归处理子元素
-  Array.from(element.children).forEach(child => {
+  Array.from(element.children).forEach((child) => {
     applyInlineStyles(child as HTMLElement);
   });
 };
@@ -689,7 +843,7 @@ onUnmounted(() => {
 
 /* 侧边栏 */
 .sidebar {
-  width: 300px;
+  width: 340px;
   flex-shrink: 0;
   border-right: 1px solid var(--border-color, #e8e8e8);
   transition: width 0.3s;
@@ -739,15 +893,10 @@ onUnmounted(() => {
   color: var(--text-primary, #262626);
 }
 
-.pane-subtitle {
-  font-size: 12px;
-  color: var(--text-secondary, #8c8c8c);
-  margin-left: 8px;
-}
-
 .pane-actions {
   display: flex;
   gap: 6px;
+  align-items: center;
 }
 
 .pane-btn {
@@ -772,6 +921,43 @@ onUnmounted(() => {
   color: white;
 }
 
+.pane-btn.stop-btn {
+  background: #ff4d4f;
+  border-color: #ff4d4f;
+  color: white;
+}
+
+.pane-btn.stop-btn:hover {
+  background: #ff7875;
+}
+
+.streaming-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #667eea;
+}
+
+.streaming-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #667eea;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}
+
 /* 编辑区域 */
 .editor-content {
   flex: 1;
@@ -791,6 +977,15 @@ onUnmounted(() => {
 }
 
 .word-count {
+  font-weight: 500;
+}
+
+.step-info {
+  padding: 2px 10px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 10px;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -882,8 +1077,7 @@ onUnmounted(() => {
   overflow-y: auto;
 }
 
-/* 微信公众号文章样式 - 科技感/程序员风格 (明亮主题) */
-/* 使用 :deep() 确保样式应用到 v-html 内容 */
+/* 微信公众号文章样式 */
 :deep(.wechat-article) {
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', -apple-system-font, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei UI', 'Microsoft YaHei', Arial, sans-serif;
   font-size: 15px;
@@ -897,7 +1091,6 @@ onUnmounted(() => {
   background-size: 24px 24px;
 }
 
-/* H1 主标题 - 科技感发光 */
 :deep(.wechat-article h1) {
   font-size: 26px;
   font-weight: 700;
@@ -923,7 +1116,6 @@ onUnmounted(() => {
   color: #7c3aed;
 }
 
-/* H2 副标题 - 霓虹边框 */
 :deep(.wechat-article h2) {
   font-size: 20px;
   font-weight: 600;
@@ -944,7 +1136,6 @@ onUnmounted(() => {
   opacity: 0.8;
 }
 
-/* H3 小标题 - 青色科技 */
 :deep(.wechat-article h3) {
   font-size: 17px;
   font-weight: 600;
@@ -963,7 +1154,6 @@ onUnmounted(() => {
   font-size: 0.85em;
 }
 
-/* H4 更小标题 - 橙色警告风 */
 :deep(.wechat-article h4) {
   font-size: 15px;
   font-weight: 600;
@@ -998,7 +1188,6 @@ onUnmounted(() => {
   font-size: 0.75em;
 }
 
-/* 段落 - 优化阅读体验 */
 :deep(.wechat-article p) {
   margin: 16px 0;
   text-align: justify;
@@ -1006,21 +1195,12 @@ onUnmounted(() => {
   color: #374151;
 }
 
-:deep(.wechat-article p:first-of-type) {
-  text-indent: 0;
-}
-
-/* 首字下沉效果 - 科技风 */
-:deep(.wechat-article p:first-of-type::first-letter) {
-  font-size: 2.2em;
-  font-weight: 700;
+:deep(.wechat-article a) {
   color: #2563eb;
-  float: left;
-  margin-right: 8px;
-  line-height: 1;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(37, 99, 235, 0.4);
 }
 
-/* 图片 - 科技边框 */
 :deep(.wechat-article img) {
   max-width: 100%;
   height: auto;
@@ -1031,7 +1211,6 @@ onUnmounted(() => {
   display: block;
 }
 
-/* 引用块 - 终端风格 */
 :deep(.wechat-article blockquote) {
   margin: 24px 0;
   padding: 20px 24px 20px 48px;
@@ -1040,149 +1219,36 @@ onUnmounted(() => {
   border-radius: 8px;
   color: #4c1d95;
   position: relative;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: monospace;
 }
 
 :deep(.wechat-article blockquote::before) {
-  content: '>';
-  font-size: 16px;
+  content: '"';
+  position: absolute;
+  left: 16px;
+  top: 12px;
+  font-size: 36px;
   color: #7c3aed;
-  position: absolute;
-  top: 20px;
-  left: 20px;
-  font-weight: bold;
+  font-family: Georgia, serif;
+  line-height: 1;
+  opacity: 0.6;
 }
 
-:deep(.wechat-article blockquote::after) {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, #7c3aed, #3b82f6, #7c3aed);
-  border-radius: 8px 8px 0 0;
-}
-
-/* 列表 - 科技符号 */
 :deep(.wechat-article ul),
 :deep(.wechat-article ol) {
   margin: 18px 0;
   padding-left: 24px;
-}
-
-:deep(.wechat-article ul li) {
-  margin: 12px 0;
-  position: relative;
-  list-style: none;
   color: #374151;
 }
 
-:deep(.wechat-article ul li::before) {
-  content: '▸';
-  color: #2563eb;
-  position: absolute;
-  left: -20px;
-  font-size: 14px;
-}
-
-:deep(.wechat-article ol li) {
+:deep(.wechat-article li) {
   margin: 12px 0;
-  color: #374151;
 }
 
-:deep(.wechat-article ol li::marker) {
+:deep(.wechat-article li::marker) {
   color: #7c3aed;
-  font-weight: 600;
 }
 
-:deep(.wechat-article li > ul li::before) {
-  content: '▹';
-  color: #8b5cf6;
-}
-
-/* 链接 - 科技蓝 */
-:deep(.wechat-article a) {
-  color: #2563eb;
-  text-decoration: none;
-  border-bottom: 1px solid rgba(37, 99, 235, 0.4);
-  padding-bottom: 1px;
-  transition: all 0.2s;
-  position: relative;
-}
-
-:deep(.wechat-article a:hover) {
-  color: #1d4ed8;
-  border-bottom-color: #1d4ed8;
-}
-
-/* 代码块 - VS Code 暗色主题风格 */
-:deep(.wechat-article pre.wechat-code-block) {
-  background: #0d1117;
-  border: 1px solid #30363d;
-  border-radius: 12px;
-  padding: 20px;
-  margin: 24px 0;
-  overflow-x: auto;
-  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, Consolas, monospace;
-  font-size: 13px;
-  line-height: 1.7;
-  color: #e6edf3;
-  position: relative;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-/* 代码块顶部装饰 - macOS 窗口风格 */
-:deep(.wechat-article pre.wechat-code-block::before) {
-  content: '';
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  width: 12px;
-  height: 12px;
-  background: #ff5f56;
-  border-radius: 50%;
-  box-shadow: 20px 0 0 #ffbd2e, 40px 0 0 #27c93f;
-}
-
-/* 代码块标题栏 */
-:deep(.wechat-article pre.wechat-code-block::after) {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 44px;
-  background: linear-gradient(180deg, #161b22 0%, #0d1117 100%);
-  border-radius: 12px 12px 0 0;
-  border-bottom: 1px solid #30363d;
-  z-index: 0;
-}
-
-:deep(.wechat-article pre.wechat-code-block code) {
-  background: transparent;
-  padding: 0;
-  padding-top: 28px;
-  border-radius: 0;
-  font-size: inherit;
-  color: inherit;
-  display: block;
-  position: relative;
-  z-index: 1;
-}
-
-/* 行内代码 - 明亮背景下的暗色风格 */
-:deep(.wechat-article code.wechat-inline-code) {
-  background: #1e1e2e;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', Monaco, Consolas, monospace;
-  font-size: 0.88em;
-  color: #a6e3a1;
-  border: 1px solid #313244;
-}
-
-/* 表格 - 数据面板风格 */
 :deep(.wechat-article table) {
   width: 100%;
   border-collapse: separate;
@@ -1203,10 +1269,8 @@ onUnmounted(() => {
   text-align: left;
   border: none;
   border-bottom: 1px solid #e5e7eb;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: monospace;
   font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
 :deep(.wechat-article td) {
@@ -1217,133 +1281,90 @@ onUnmounted(() => {
   color: #374151;
 }
 
-:deep(.wechat-article tr:nth-child(even)) {
-  background: #f9fafb;
+:deep(.wechat-article tr:hover td) {
+  background: rgba(124, 58, 237, 0.03);
 }
 
-:deep(.wechat-article tr:last-child td) {
-  border-bottom: none;
-}
-
-:deep(.wechat-article tr:hover) {
-  background: rgba(59, 130, 246, 0.05);
-}
-
-/* 分隔线 - 扫描线效果 */
 :deep(.wechat-article hr) {
   border: none;
   height: 1px;
-  background: linear-gradient(90deg,
-    transparent 0%,
-    rgba(59, 130, 246, 0.3) 20%,
-    rgba(124, 58, 237, 0.4) 50%,
-    rgba(59, 130, 246, 0.3) 80%,
-    transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(59, 130, 246, 0.3) 20%, rgba(124, 58, 237, 0.4) 50%, rgba(59, 130, 246, 0.3) 80%, transparent 100%);
   margin: 36px 0;
   position: relative;
 }
 
 :deep(.wechat-article hr::before) {
-  content: '//';
-  color: #3b82f6;
+  content: '◆';
   position: absolute;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
+  color: #7c3aed;
+  font-size: 8px;
   background: #fafbfc;
-  padding: 0 16px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 12px;
-  letter-spacing: 2px;
+  padding: 0 8px;
 }
 
-/* 加粗 - 高亮 */
 :deep(.wechat-article strong) {
   font-weight: 700;
   color: #ea580c;
 }
 
-/* 斜体 - 注释风格 */
 :deep(.wechat-article em) {
   font-style: italic;
   color: #6b7280;
 }
 
-/* 复制按钮样式 */
-.copy-btn {
-  background: linear-gradient(135deg, #07c160, #05a050);
-  color: white;
+:deep(.wechat-article code) {
+  background: #1e1e2e;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  font-size: 0.88em;
+  color: #a6e3a1;
+  border: 1px solid #313244;
+}
+
+:deep(.wechat-article pre) {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 24px 0;
+  overflow-x: auto;
+  font-family: 'SF Mono', Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #e6edf3;
+  position: relative;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+:deep(.wechat-article pre code) {
+  background: transparent;
+  padding: 0;
   border: none;
-}
-
-.copy-btn:hover {
-  background: linear-gradient(135deg, #06ad56, #048a46);
-  border: none;
-}
-
-/* 手机端按钮激活状态 */
-.pane-btn.active {
-  background: var(--color-primary, #1890ff);
-  border-color: var(--color-primary, #1890ff);
-  color: white;
-}
-
-/* 全局 Loading 遮罩 */
-.global-loading {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-}
-
-.loading-spinner-large {
-  width: 60px;
-  height: 60px;
-  border: 4px solid rgba(255, 255, 255, 0.3);
-  border-top-color: white;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.loading-text {
-  margin-top: 20px;
-  font-size: 16px;
-  color: white;
-  font-weight: 500;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  color: inherit;
+  font-size: inherit;
 }
 
 /* 错误提示 */
 .error-toast {
   position: fixed;
-  bottom: 20px;
+  top: 60px;
   left: 50%;
   transform: translateX(-50%);
   padding: 12px 24px;
-  background: var(--error-bg, #fff2f0);
-  border: 1px solid var(--error-border, #ffccc7);
+  background: #ff4d4f;
+  color: white;
   border-radius: 6px;
-  color: var(--error-color, #ff4d4f);
   font-size: 13px;
+  box-shadow: 0 4px 12px rgba(255, 77, 79, 0.3);
   z-index: 1000;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* 过渡动画 */
+/* Toast 动画 */
 .toast-enter-active,
 .toast-leave-active {
   transition: all 0.3s ease;
@@ -1352,23 +1373,29 @@ onUnmounted(() => {
 .toast-enter-from,
 .toast-leave-to {
   opacity: 0;
-  transform: translateX(-50%) translateY(20px);
+  transform: translateX(-50%) translateY(-20px);
 }
 
 /* 暗色主题适配 */
 @media (prefers-color-scheme: dark) {
   .app {
-    --bg-component: #1f1f1f;
-    --bg-hover: #2c2c2c;
-    --panel-bg: #141414;
+    --bg-component: #141414;
     --text-primary: #d9d9d9;
     --text-secondary: #8c8c8c;
     --text-muted: #595959;
-    --border-color: #434343;
-    --color-primary: #1890ff;
-    --error-bg: #2a1215;
-    --error-border: #58181c;
-    --error-color: #ff7875;
+    --border-color: #303030;
+    --bg-hover: #1f1f1f;
+    --color-primary: #4ec9b0;
+    --color-warning: #faad14;
+  }
+
+  .markdown-editor {
+    background: #1f1f1f;
+    color: #d9d9d9;
+  }
+
+  .step-info {
+    background: linear-gradient(135deg, #4ec9b0 0%, #2d8a78 100%);
   }
 }
 </style>
