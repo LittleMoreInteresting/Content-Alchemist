@@ -10,6 +10,8 @@ export function GenerateArticle(arg1:string,arg2:string,arg3:string):Promise<str
 
 export function GenerateOutline(arg1:string,arg2:string,arg3:string):Promise<models.GenerateOutlineResult>;
 
+export function GenerateViralTitles(arg1:string,arg2:string,arg3:number):Promise<Array<string>>;
+
 export function GetAIConfig():Promise<models.AIConfig>;
 
 export function GetArticleByUUID(arg1:string):Promise<models.Article>;
@@ -17,6 +19,8 @@ export function GetArticleByUUID(arg1:string):Promise<models.Article>;
 export function GetPositioning():Promise<string>;
 
 export function GetRecentArticles(arg1:number):Promise<Array<models.Article>>;
+
+export function OptimizeContent(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function ReadArticle(arg1:string):Promise<models.ReadArticleResponse>;
 

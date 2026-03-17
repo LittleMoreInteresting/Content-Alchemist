@@ -210,18 +210,18 @@ func (a *App) SaveArticle(uuid string, content string) error {
 
 	if exists {
 		// 文件存在，检查是否被外部修改
-		modified, _, err := a.fileMgr.CheckFileModified(article.FilePath, article.UpdatedAt)
-		if err != nil {
-			// 如果是文件不存在错误，忽略（可能被删除）
-			if _, ok := err.(models.FileError); !ok {
-				return fmt.Errorf("检查文件修改状态失败: %w", err)
-			}
-		} else if modified {
-			return models.FileError{
-				Code:    "FILE_MODIFIED_EXTERNALLY",
-				Message: "文件已被外部程序修改，请先刷新或另存为",
-			}
-		}
+		// modified, _, err := a.fileMgr.CheckFileModified(article.FilePath, article.UpdatedAt)
+		// if err != nil {
+		// 	// 如果是文件不存在错误，忽略（可能被删除）
+		// 	if _, ok := err.(models.FileError); !ok {
+		// 		return fmt.Errorf("检查文件修改状态失败: %w", err)
+		// 	}
+		// } else if modified {
+		// 	return models.FileError{
+		// 		Code:    "FILE_MODIFIED_EXTERNALLY",
+		// 		Message: "文件已被外部程序修改，请先刷新或另存为",
+		// 	}
+		// }
 	}
 
 	// 写入文件
@@ -539,6 +539,50 @@ func (a *App) GenerateArticle(title string, outline string, requirements string)
 	}
 
 	return article, nil
+}
+
+// OptimizeContent 优化文章内容
+// content: 要优化的内容
+// optimizeType: 优化类型 (polish:润色, expand:扩写, simplify:精简, example:添加案例)
+// requirements: 额外要求
+// 返回: 优化后的内容
+func (a *App) OptimizeContent(content string, optimizeType string, requirements string) (string, error) {
+	if a.aiService == nil {
+		a.initAIService()
+	}
+
+	if content == "" {
+		return "", fmt.Errorf("内容不能为空")
+	}
+
+	result, err := a.aiService.OptimizeContent(content, optimizeType, requirements)
+	if err != nil {
+		return "", err
+	}
+
+	return result, nil
+}
+
+// GenerateViralTitles 生成爆款标题
+// content: 文章内容
+// positioning: 公众号定位
+// count: 生成标题数量（默认5个，最多10个）
+// 返回: 标题列表
+func (a *App) GenerateViralTitles(content string, positioning string, count int) ([]string, error) {
+	if a.aiService == nil {
+		a.initAIService()
+	}
+
+	if content == "" {
+		return nil, fmt.Errorf("内容不能为空")
+	}
+
+	titles, err := a.aiService.GenerateViralTitles(content, positioning, count)
+	if err != nil {
+		return nil, err
+	}
+
+	return titles, nil
 }
 
 // SaveArticleWithSmartNaming 智能保存文章

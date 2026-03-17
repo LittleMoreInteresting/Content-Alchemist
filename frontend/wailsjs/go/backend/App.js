@@ -18,6 +18,10 @@ export function GenerateOutline(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GenerateOutline'](arg1, arg2, arg3);
 }
 
+export function GenerateViralTitles(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GenerateViralTitles'](arg1, arg2, arg3);
+}
+
 export function GetAIConfig() {
   return window['go']['backend']['App']['GetAIConfig']();
 }
@@ -32,6 +36,10 @@ export function GetPositioning() {
 
 export function GetRecentArticles(arg1) {
   return window['go']['backend']['App']['GetRecentArticles'](arg1);
+}
+
+export function OptimizeContent(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['OptimizeContent'](arg1, arg2, arg3);
 }
 
 export function ReadArticle(arg1) {
