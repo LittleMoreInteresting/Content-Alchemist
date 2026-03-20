@@ -20,6 +20,7 @@ export const useEditorStore = defineStore('editor', () => {
   const selectedText = ref('')
   const saveStatus = ref<'saved' | 'saving' | 'unsaved'>('saved')
   const currentTheme = ref('default')
+  const titleSuggestions = ref<string[]>([])
 
   // Getters
   const wordCount = computed(() => {
@@ -126,6 +127,14 @@ export const useEditorStore = defineStore('editor', () => {
     currentTheme.value = theme
   }
 
+  function setTitleSuggestions(titles: string[]) {
+    titleSuggestions.value = titles
+  }
+
+  function clearTitleSuggestions() {
+    titleSuggestions.value = []
+  }
+
   function reset() {
     article.value = {
       id: '',
@@ -151,6 +160,7 @@ export const useEditorStore = defineStore('editor', () => {
     selectedText,
     saveStatus,
     currentTheme,
+    titleSuggestions,
     wordCount,
     outlineFromContent,
     setArticle,
@@ -165,6 +175,8 @@ export const useEditorStore = defineStore('editor', () => {
     markSaving,
     markUnsaved,
     setTheme,
+    setTitleSuggestions,
+    clearTitleSuggestions,
     reset
   }
 })

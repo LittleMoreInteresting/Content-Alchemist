@@ -32,8 +32,8 @@ export function SaveArticle(arg1:model.Article):Promise<void>;
 
 export function SaveConfig(arg1:model.Config):Promise<void>;
 
-export function StreamWriting(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
+export function StreamWriting(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<string>;
 
-export function StreamWritingEvent(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
+export function StreamWritingEvent(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<void>;
 
 export function TestConnection(arg1:string,arg2:string,arg3:string):Promise<void>;

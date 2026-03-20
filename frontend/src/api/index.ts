@@ -112,7 +112,8 @@ export async function streamWriteWithAI(
   context: string,
   selectedText: string,
   position: string,
-  style: string
+  style: string,
+  customPrompt?: string
 ): Promise<string> {
-  return await StreamWriting(action, context, selectedText, position, style)
+  return await StreamWriting(action, context, selectedText, position, style, customPrompt || '')
 }

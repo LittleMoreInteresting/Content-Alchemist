@@ -94,8 +94,8 @@ function onTitleChange() {
 }
 
 function showAIAssistant() {
-  // 触发AI助手命令面板
-  window.dispatchEvent(new KeyboardEvent('keydown', { key: '/', ctrlKey: true }))
+  // 触发AI助手命令面板 - 使用自定义事件
+  window.dispatchEvent(new CustomEvent('show-ai-slash-menu'))
 }
 
 function goToSettings() {

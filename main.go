@@ -263,7 +263,7 @@ func (a *App) GenerateOutline(title, style, audience string) ([]model.OutlineNod
 }
 
 // StreamWriting 流式写作 - 返回完整内容（简化版）
-func (a *App) StreamWriting(action, context, selectedText, position, style string) (string, error) {
+func (a *App) StreamWriting(action, context, selectedText, position, style, customPrompt string) (string, error) {
 	if a.configService == nil {
 		return "", fmt.Errorf("service not initialized")
 	}
@@ -289,6 +289,7 @@ func (a *App) StreamWriting(action, context, selectedText, position, style strin
 		SelectedText: selectedText,
 		Position:     position,
 		Style:        style,
+		CustomPrompt: customPrompt,
 	})
 	if err != nil {
 		return "", err
@@ -300,7 +301,7 @@ func (a *App) StreamWriting(action, context, selectedText, position, style strin
 // StreamWritingEvent 流式写作 - 使用 Wails 事件
 // 前端通过 EventsOn("ai-stream") 监听流式输出
 // 通过 EventsOn("ai-stream-done") 监听完成事件
-func (a *App) StreamWritingEvent(action, context, selectedText, position, style string) error {
+func (a *App) StreamWritingEvent(action, context, selectedText, position, style, customPrompt string) error {
 	if a.configService == nil {
 		return fmt.Errorf("service not initialized")
 	}
@@ -330,6 +331,7 @@ func (a *App) StreamWritingEvent(action, context, selectedText, position, style 
 			SelectedText: selectedText,
 			Position:     position,
 			Style:        style,
+			CustomPrompt: customPrompt,
 		}, func(chunk string) {
 			// 发送流式数据到前端
 			runtime.EventsEmit(a.ctx, "ai-stream", map[string]string{
