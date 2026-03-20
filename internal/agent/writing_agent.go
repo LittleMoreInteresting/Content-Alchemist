@@ -12,11 +12,12 @@ import (
 
 // WritingRequest 写作请求
 type WritingRequest struct {
-	Action       string  `json:"action"`       // "expand", "polish", "shorten", "continue", "title"
+	Action       string  `json:"action"`       // "expand", "polish", "shorten", "continue", "title", "custom", "casual", "data", "rewrite"
 	Context      string  `json:"context"`      // 上下文（前几段）
 	SelectedText string  `json:"selectedText"` // 选中的文本
 	Position     string  `json:"position"`     // "before", "after", "replace"
 	Style        string  `json:"style"`        // 风格描述
+	CustomPrompt string  `json:"customPrompt"` // 自定义提示词（当 action 为 "custom" 时使用）
 }
 
 // WritingResponse 写作响应
@@ -136,6 +137,39 @@ func (a *WritingAgent) buildPrompt(req WritingRequest) string {
 		sb.WriteString("\n2. 吸引读者点击")
 		sb.WriteString("\n3. 长度适中（10-30字）")
 		sb.WriteString("\n4. 以JSON数组格式返回")
+
+	case "rewrite":
+		sb.WriteString("请重写以下文本，保持核心意思但表达方式完全不同：\n\n")
+		sb.WriteString(req.SelectedText)
+		sb.WriteString("\n\n要求：")
+		sb.WriteString("\n1. 使用不同的词汇和句式")
+		sb.WriteString("\n2. 保持原意不变")
+		sb.WriteString("\n3. 提升表达质量")
+
+	case "casual":
+		sb.WriteString("请将以下文本改写成更加口语化、通俗易懂的风格：\n\n")
+		sb.WriteString(req.SelectedText)
+		sb.WriteString("\n\n要求：")
+		sb.WriteString("\n1. 使用日常用语")
+		sb.WriteString("\n2. 增加亲和力")
+		sb.WriteString("\n3. 保持内容准确")
+
+	case "data":
+		sb.WriteString("请为以下文本添加相关的数据支撑和统计信息：\n\n")
+		sb.WriteString(req.SelectedText)
+		sb.WriteString("\n\n要求：")
+		sb.WriteString("\n1. 添加真实可信的数据")
+		sb.WriteString("\n2. 使用具体数字增强说服力")
+		sb.WriteString("\n3. 保持论述的逻辑性")
+
+	case "custom":
+		if req.CustomPrompt != "" {
+			sb.WriteString(req.CustomPrompt)
+			sb.WriteString("\n\n文本内容：\n")
+			sb.WriteString(req.SelectedText)
+		} else {
+			sb.WriteString(req.SelectedText)
+		}
 
 	default:
 		sb.WriteString(req.SelectedText)

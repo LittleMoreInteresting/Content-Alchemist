@@ -82,6 +82,7 @@ const slashMenuPosition = ref({ x: 0, y: 0 })
 // AI浮动工具条
 const showFloatingAI = ref(false)
 const floatingAIPosition = ref({ x: 0, y: 0 })
+const selectionRange = ref({ start: 0, end: 0 })
 
 let inputDebounceTimer: number | null = null
 
@@ -109,9 +110,17 @@ function onKeyDown(e: KeyboardEvent) {
 }
 
 function onMouseUp() {
+  const textarea = editorRef.value
+  if (!textarea) return
+  
   const selection = window.getSelection()?.toString()
   if (selection && selection.trim()) {
     editorStore.setSelectedText(selection)
+    // 记录选中文本的位置
+    selectionRange.value = {
+      start: textarea.selectionStart,
+      end: textarea.selectionEnd
+    }
     showFloatingAI.value = true
     // 计算位置
     const selectionObj = window.getSelection()
@@ -173,7 +182,7 @@ function onSlashSelect(command: string) {
   showSlashMenu.value = false
 }
 
-async function onAIAction(action: string, _customPrompt?: string) {
+async function onAIAction(action: string, customPrompt?: string) {
   const configStore = useConfigStore()
   editorStore.setAIGenerating(true)
   showFloatingAI.value = false
@@ -181,10 +190,12 @@ async function onAIAction(action: string, _customPrompt?: string) {
   try {
     // 构建上下文（前后各200字符）
     const textarea = editorRef.value
-    const cursorPos = textarea?.selectionStart || 0
+    const cursorPos = selectionRange.value.start
     const contextStart = Math.max(0, cursorPos - 200)
     const contextEnd = Math.min(content.value.length, cursorPos + 200)
     const context = content.value.substring(contextStart, contextEnd)
+    
+    console.log('AI Action:', action, 'customPrompt:', customPrompt)
     
     // 调用后端AI接口
     const result = await streamWriteWithAI(
@@ -192,20 +203,36 @@ async function onAIAction(action: string, _customPrompt?: string) {
       context,
       selectedText.value,
       'replace',
-      configStore.styleDescription
+      configStore.styleDescription,
+      customPrompt
     )
     
-    // 替换选中的文本
-    const start = content.value.indexOf(selectedText.value)
-    if (start !== -1) {
-      content.value = content.value.substring(0, start) + result + content.value.substring(start + selectedText.value.length)
+    // 使用记录的选中文本位置进行替换
+    const start = selectionRange.value.start
+    const end = selectionRange.value.end
+    
+    // 验证选中的文本是否匹配
+    const actualSelected = content.value.substring(start, end)
+    if (actualSelected !== selectedText.value) {
+      console.warn('选中文本已变化，使用indexOf回退')
+      const idx = content.value.indexOf(selectedText.value)
+      if (idx === -1) {
+        throw new Error('无法找到要替换的文本')
+      }
+      content.value = content.value.substring(0, idx) + result + content.value.substring(idx + selectedText.value.length)
+    } else {
+      content.value = content.value.substring(0, start) + result + content.value.substring(end)
     }
     
     ElMessage.success('AI处理完成')
   } catch (error) {
+    console.error('AI处理失败:', error)
     ElMessage.error('AI处理失败：' + error)
   } finally {
     editorStore.setAIGenerating(false)
+    // 清空选择
+    editorStore.setSelectedText('')
+    selectionRange.value = { start: 0, end: 0 }
   }
 }
 

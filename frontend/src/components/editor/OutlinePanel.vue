@@ -104,13 +104,43 @@ async function generateOutline() {
       configStore.styleDescription,
       configStore.config.audience
     )
+    
+    // 更新大纲
     editorStore.updateOutline(nodes as any)
+    
+    // 将大纲同步到编辑器内容
+    syncOutlineToEditor(nodes as OutlineNode[])
+    
     ElMessage.success('大纲生成成功')
   } catch (error) {
     ElMessage.error('生成大纲失败：' + error)
   } finally {
     editorStore.setAIGenerating(false)
   }
+}
+
+// 将大纲同步到编辑器内容
+function syncOutlineToEditor(nodes: OutlineNode[]) {
+  if (nodes.length === 0) return
+  
+  // 构建 Markdown 大纲
+  let markdownContent = `# ${editorStore.article.title}\n\n`
+  
+  for (const node of nodes) {
+    const prefix = '#'.repeat(node.level)
+    markdownContent += `${prefix} ${node.title}\n\n`
+  }
+  
+  // 保留原有内容（除了标题）
+  const existingContent = editorStore.article.content
+  const bodyMatch = existingContent.match(/# .+[\r\n]+([\s\S]*)/)
+  if (bodyMatch && bodyMatch[1].trim()) {
+    markdownContent += bodyMatch[1].trim()
+  } else {
+    markdownContent += '开始创作...'
+  }
+  
+  editorStore.updateContent(markdownContent)
 }
 
 function refreshOutline() {
@@ -125,7 +155,7 @@ function refreshOutline() {
 }
 
 function addNode() {
-  // 添加一个新的 H2 节点到编辑器
+  // 添加一个新的 H2 节点
   const newNode: OutlineNode = {
     id: Date.now().toString(),
     level: 2,
@@ -135,13 +165,16 @@ function addNode() {
     targetWords: 300
   }
   
+  // 更新大纲
   const currentOutline = [...editorStore.article.outline]
   currentOutline.push(newNode)
   editorStore.updateOutline(currentOutline)
   
-  // 同时在编辑器内容末尾添加标题
+  // 同步到编辑器内容
   const newContent = editorStore.article.content + '\n\n## 新章节\n\n'
   editorStore.updateContent(newContent)
+  
+  ElMessage.success('已添加新章节')
 }
 </script>
 

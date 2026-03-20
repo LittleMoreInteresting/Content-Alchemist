@@ -19,7 +19,7 @@ type ArticleService struct {
 func NewArticleService() (*ArticleService, error) {
 	db, err := repository.NewDB()
 	if err != nil {
-		return nil, fmt.Errorf("init db failed: %w", err)
+		return nil, err
 	}
 
 	return &ArticleService{db: db}, nil

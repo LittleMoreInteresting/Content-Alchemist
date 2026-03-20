@@ -9,9 +9,10 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"content-alchemist/internal/model"
 	"content-alchemist/internal/utils"
+
+	_ "modernc.org/sqlite"
 )
 
 // DB SQLite数据库管理器
@@ -20,20 +21,27 @@ type DB struct {
 	crypto *utils.Crypto
 }
 
+// ErrKeyNotFound 密钥未找到错误
+var ErrKeyNotFound = utils.ErrKeyNotFound
+
 // NewDB 创建数据库连接
 func NewDB() (*DB, error) {
-	homeDir, err := os.UserHomeDir()
+	// 首先检查是否有加密密钥
+	if !utils.HasKey() {
+		return nil, ErrKeyNotFound
+	}
+
+	dataDir, err := dbDir()
 	if err != nil {
 		return nil, err
 	}
 
-	dataDir := filepath.Join(homeDir, ".content-alchemist")
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return nil, err
 	}
 
 	dbPath := filepath.Join(dataDir, "data.db")
-	conn, err := sql.Open("sqlite3", dbPath)
+	conn, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -51,6 +59,37 @@ func NewDB() (*DB, error) {
 	}
 
 	return db, nil
+}
+func dbDir() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	dataDir := filepath.Join(homeDir, ".content-alchemist")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return "", err
+	}
+	return dataDir, nil
+}
+
+// InitWithNewKey 生成新密钥并初始化数据库
+func InitWithNewKey() error {
+	// 生成并存储新密钥
+	if err := utils.GenerateAndStoreKey(); err != nil {
+		return fmt.Errorf("generate and store key failed: %w", err)
+	}
+	// 清理数据库
+	dataDir, err := dbDir()
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(dataDir)
+}
+
+// HasKey 检查系统中是否存在加密密钥
+func HasKey() bool {
+	return utils.HasKey()
 }
 
 // Close 关闭数据库连接
@@ -172,14 +211,15 @@ func (d *DB) GetConfig() (*model.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// 解密 API Key
-	decryptedKey, err := d.crypto.Decrypt(encryptedKey)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt api key failed: %w", err)
+	if encryptedKey != "" {
+		// 解密 API Key
+		decryptedKey, err := d.crypto.Decrypt(encryptedKey)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt api key failed: %w", err)
+		}
+		config.APIKey = decryptedKey
 	}
-	config.APIKey = decryptedKey
-	
+
 	if tagsStr != "" {
 		config.StyleTags = strings.Split(tagsStr, ",")
 	} else {

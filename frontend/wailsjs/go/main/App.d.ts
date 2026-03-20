@@ -20,6 +20,10 @@ export function Greet(arg1:string):Promise<string>;
 
 export function HasConfig():Promise<boolean>;
 
+export function HasEncryptionKey():Promise<boolean>;
+
+export function InitEncryptionKey():Promise<void>;
+
 export function ListArticles():Promise<Array<model.Article>>;
 
 export function ListMaterials(arg1:string):Promise<Array<model.Material>>;

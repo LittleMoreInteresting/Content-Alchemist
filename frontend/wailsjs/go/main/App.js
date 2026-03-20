@@ -38,6 +38,14 @@ export function HasConfig() {
   return window['go']['main']['App']['HasConfig']();
 }
 
+export function HasEncryptionKey() {
+  return window['go']['main']['App']['HasEncryptionKey']();
+}
+
+export function InitEncryptionKey() {
+  return window['go']['main']['App']['InitEncryptionKey']();
+}
+
 export function ListArticles() {
   return window['go']['main']['App']['ListArticles']();
 }

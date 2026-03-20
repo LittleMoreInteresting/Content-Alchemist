@@ -17,7 +17,7 @@ type MaterialService struct {
 func NewMaterialService() (*MaterialService, error) {
 	db, err := repository.NewDB()
 	if err != nil {
-		return nil, fmt.Errorf("init db failed: %w", err)
+		return nil, err
 	}
 
 	return &MaterialService{db: db}, nil
@@ -91,6 +91,6 @@ func (s *MaterialService) IncrementUsage(id string) error {
 }
 
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || 
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
 		(s[:len(substr)] == substr) || contains(s[1:], substr))
 }

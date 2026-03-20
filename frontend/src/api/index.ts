@@ -4,23 +4,40 @@
  */
 
 import {
+  // 密钥管理
+  HasEncryptionKey,
+  InitEncryptionKey,
+  // 配置
   GetConfig,
   SaveConfig,
   HasConfig,
   TestConnection,
+  // 文章
   CreateArticle,
   GetArticle,
   SaveArticle,
   ListArticles,
   DeleteArticle,
+  // 素材
   ListMaterials,
   CreateMaterial,
   DeleteMaterial,
+  // AI
   GenerateOutline,
   StreamWriting
 } from '../../wailsjs/go/main/App'
 
 import type * as GoModels from '../../wailsjs/go/models'
+
+// ===== 密钥管理 API =====
+
+export async function checkHasEncryptionKey(): Promise<boolean> {
+  return await HasEncryptionKey()
+}
+
+export async function initEncryptionKey(): Promise<void> {
+  return await InitEncryptionKey()
+}
 
 // ===== Config API =====
 

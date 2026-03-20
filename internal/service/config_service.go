@@ -13,6 +13,9 @@ import (
 	"content-alchemist/internal/repository"
 )
 
+// ErrKeyNotFound 加密密钥未找到错误
+var ErrKeyNotFound = repository.ErrKeyNotFound
+
 // ConfigService 配置服务
 type ConfigService struct {
 	db *repository.DB
@@ -22,10 +25,20 @@ type ConfigService struct {
 func NewConfigService() (*ConfigService, error) {
 	db, err := repository.NewDB()
 	if err != nil {
-		return nil, fmt.Errorf("init db failed: %w", err)
+		return nil, err
 	}
 
 	return &ConfigService{db: db}, nil
+}
+
+// InitEncryptionKey 初始化加密密钥（首次使用）
+func InitEncryptionKey() error {
+	return repository.InitWithNewKey()
+}
+
+// HasEncryptionKey 检查是否存在加密密钥
+func HasEncryptionKey() bool {
+	return repository.HasKey()
 }
 
 // SaveConfig 保存配置（自动加密API Key）
@@ -42,7 +55,7 @@ func (s *ConfigService) GetConfig() (*model.Config, error) {
 	return s.db.GetConfig()
 }
 
-// HasConfig 检查是否已有配置
+// HasConfig 检查是否有配置
 func (s *ConfigService) HasConfig() bool {
 	return s.db.HasConfig()
 }
@@ -59,6 +72,13 @@ func (s *ConfigService) TestConnection(apiKey, baseURL, modelName string) error 
 	if apiKey == "" {
 		return fmt.Errorf("API Key不能为空")
 	}
+
+	// 记录日志（隐藏部分 API Key）
+	maskedKey := apiKey
+	if len(apiKey) > 8 {
+		maskedKey = apiKey[:4] + "****" + apiKey[len(apiKey)-4:]
+	}
+	fmt.Printf("Testing connection with API Key: %s, BaseURL: %s, Model: %s\n", maskedKey, baseURL, modelName)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -77,7 +97,7 @@ func (s *ConfigService) TestConnection(apiKey, baseURL, modelName string) error 
 	messages := []*schema.Message{
 		{
 			Role:    schema.User,
-			Content: "你好，这是一个测试消息，请回复\"连接成功\"",
+			Content: "你好",
 		},
 	}
 

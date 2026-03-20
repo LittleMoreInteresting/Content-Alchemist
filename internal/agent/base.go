@@ -2,8 +2,12 @@ package agent
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
+	"time"
 
 	einoModel "github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino-ext/components/model/openai"
@@ -30,6 +34,10 @@ type BaseAgent struct {
 
 // NewBaseAgent 创建基于 Eino 的基础Agent
 func NewBaseAgent(apiKey string, baseURL string, modelName string) (*BaseAgent, error) {
+	if apiKey == "" {
+		return nil, fmt.Errorf("api key is empty")
+	}
+
 	if baseURL == "" {
 		baseURL = "https://api.deepseek.com"
 	}
@@ -39,12 +47,33 @@ func NewBaseAgent(apiKey string, baseURL string, modelName string) (*BaseAgent, 
 
 	ctx := context.Background()
 	
+	// 创建自定义 HTTP 客户端，禁用 HTTP/2 以避免流错误
+	httpClient := &http.Client{
+		Timeout: 120 * time.Second,
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			ForceAttemptHTTP2:     false, // 禁用 HTTP/2
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: false,
+			},
+		},
+	}
+	
 	// 使用 Eino 的 OpenAI 组件创建 ChatModel
 	// 支持 DeepSeek（兼容 OpenAI API 格式）
 	cm, err := openai.NewChatModel(ctx, &openai.ChatModelConfig{
-		APIKey:  apiKey,
-		BaseURL: baseURL,
-		Model:   modelName,
+		APIKey:     apiKey,
+		BaseURL:    baseURL,
+		Model:      modelName,
+		HTTPClient: httpClient,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("init eino chat model failed: %w", err)

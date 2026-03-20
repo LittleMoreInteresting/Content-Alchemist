@@ -36,24 +36,28 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
-	// 初始化服务
+	// 初始化服务（如果密钥存在）
 	configService, err := service.NewConfigService()
 	if err != nil {
 		fmt.Printf("Init config service failed: %v\n", err)
+		// 密钥不存在，不中断，前端会检查并引导初始化
+	} else {
+		a.configService = configService
 	}
-	a.configService = configService
 
 	articleService, err := service.NewArticleService()
 	if err != nil {
 		fmt.Printf("Init article service failed: %v\n", err)
+	} else {
+		a.articleService = articleService
 	}
-	a.articleService = articleService
 
 	materialService, err := service.NewMaterialService()
 	if err != nil {
 		fmt.Printf("Init material service failed: %v\n", err)
+	} else {
+		a.materialService = materialService
 	}
-	a.materialService = materialService
 }
 
 // Greet 问候方法（示例）
@@ -61,25 +65,95 @@ func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
 }
 
+// ============ 密钥管理 API ============
+
+// HasEncryptionKey 检查是否存在加密密钥
+func (a *App) HasEncryptionKey() bool {
+	return service.HasEncryptionKey()
+}
+
+// InitEncryptionKey 初始化加密密钥（首次使用）
+func (a *App) InitEncryptionKey() error {
+	if err := service.InitEncryptionKey(); err != nil {
+		return err
+	}
+
+	// 初始化成功后，重新创建服务
+	configService, err := service.NewConfigService()
+	if err != nil {
+		return fmt.Errorf("reinit config service failed: %w", err)
+	}
+	a.configService = configService
+
+	articleService, err := service.NewArticleService()
+	if err != nil {
+		return fmt.Errorf("reinit article service failed: %w", err)
+	}
+	a.articleService = articleService
+
+	materialService, err := service.NewMaterialService()
+	if err != nil {
+		return fmt.Errorf("reinit material service failed: %w", err)
+	}
+	a.materialService = materialService
+
+	return nil
+}
+
 // ============ Config API ============
 
 // GetConfig 获取配置
 func (a *App) GetConfig() (*model.Config, error) {
-	return a.configService.GetConfig()
+	if a.configService == nil {
+		return nil, fmt.Errorf("service not initialized")
+	}
+	config, err := a.configService.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	// 隐藏 API Key 的前端显示
+	config.APIKey = maskAPIKey(config.APIKey)
+	return config, nil
+}
+
+// maskAPIKey 隐藏 API Key 中间部分
+func maskAPIKey(key string) string {
+	if len(key) <= 8 {
+		return key
+	}
+	return key[:4] + "****" + key[len(key)-4:]
 }
 
 // SaveConfig 保存配置
 func (a *App) SaveConfig(config model.Config) error {
+	if a.configService == nil {
+		return fmt.Errorf("service not initialized")
+	}
+
+	// 如果传入的 API Key 是掩码格式，保留原有的 API Key
+	if len(config.APIKey) > 4 && config.APIKey[4:8] == "****" {
+		existingConfig, err := a.configService.GetConfig()
+		if err == nil && existingConfig != nil {
+			config.APIKey = existingConfig.APIKey
+		}
+	}
+
 	return a.configService.SaveConfig(config)
 }
 
 // HasConfig 检查是否有配置
 func (a *App) HasConfig() bool {
+	if a.configService == nil {
+		return false
+	}
 	return a.configService.HasConfig()
 }
 
 // TestConnection 测试AI连接
 func (a *App) TestConnection(apiKey, baseURL, modelName string) error {
+	if a.configService == nil {
+		return fmt.Errorf("service not initialized")
+	}
 	return a.configService.TestConnection(apiKey, baseURL, modelName)
 }
 
@@ -87,26 +161,41 @@ func (a *App) TestConnection(apiKey, baseURL, modelName string) error {
 
 // CreateArticle 创建文章
 func (a *App) CreateArticle(title string) (*model.Article, error) {
+	if a.articleService == nil {
+		return nil, fmt.Errorf("service not initialized")
+	}
 	return a.articleService.CreateArticle(title)
 }
 
 // GetArticle 获取文章
 func (a *App) GetArticle(id string) (*model.Article, error) {
+	if a.articleService == nil {
+		return nil, fmt.Errorf("service not initialized")
+	}
 	return a.articleService.GetArticle(id)
 }
 
 // SaveArticle 保存文章
 func (a *App) SaveArticle(article model.Article) error {
+	if a.articleService == nil {
+		return fmt.Errorf("service not initialized")
+	}
 	return a.articleService.SaveArticle(&article)
 }
 
 // ListArticles 列出文章
 func (a *App) ListArticles() ([]model.Article, error) {
+	if a.articleService == nil {
+		return nil, fmt.Errorf("service not initialized")
+	}
 	return a.articleService.ListArticles()
 }
 
 // DeleteArticle 删除文章
 func (a *App) DeleteArticle(id string) error {
+	if a.articleService == nil {
+		return fmt.Errorf("service not initialized")
+	}
 	return a.articleService.DeleteArticle(id)
 }
 
@@ -114,16 +203,25 @@ func (a *App) DeleteArticle(id string) error {
 
 // ListMaterials 列出素材
 func (a *App) ListMaterials(materialType string) ([]model.Material, error) {
+	if a.materialService == nil {
+		return nil, fmt.Errorf("service not initialized")
+	}
 	return a.materialService.ListMaterials(materialType)
 }
 
 // CreateMaterial 创建素材
 func (a *App) CreateMaterial(material model.Material) error {
+	if a.materialService == nil {
+		return fmt.Errorf("service not initialized")
+	}
 	return a.materialService.CreateMaterial(&material)
 }
 
 // DeleteMaterial 删除素材
 func (a *App) DeleteMaterial(id string) error {
+	if a.materialService == nil {
+		return fmt.Errorf("service not initialized")
+	}
 	return a.materialService.DeleteMaterial(id)
 }
 
@@ -131,14 +229,30 @@ func (a *App) DeleteMaterial(id string) error {
 
 // GenerateOutline 生成大纲
 func (a *App) GenerateOutline(title, style, audience string) ([]model.OutlineNode, error) {
+	if a.configService == nil {
+		return nil, fmt.Errorf("service not initialized")
+	}
+
 	config, err := a.configService.GetConfig()
 	if err != nil {
 		return nil, fmt.Errorf("get config failed: %w", err)
 	}
 
+	// 检查 API Key
+	if config.APIKey == "" {
+		return nil, fmt.Errorf("api key is empty, please configure in settings")
+	}
+
+	// 日志记录（隐藏部分 key）
+	maskedKey := config.APIKey
+	if len(config.APIKey) > 8 {
+		maskedKey = config.APIKey[:4] + "****" + config.APIKey[len(config.APIKey)-4:]
+	}
+	fmt.Printf("GenerateOutline: using API Key=%s, BaseURL=%s, Model=%s\n", maskedKey, config.APIBaseURL, config.Model)
+
 	outlineAgent, err := agent.NewOutlineAgent(config.APIKey, config.APIBaseURL, config.Model)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create outline agent failed: %w", err)
 	}
 
 	return outlineAgent.GenerateOutline(a.ctx, agent.OutlineRequest{
@@ -150,9 +264,17 @@ func (a *App) GenerateOutline(title, style, audience string) ([]model.OutlineNod
 
 // StreamWriting 流式写作 - 返回完整内容（简化版）
 func (a *App) StreamWriting(action, context, selectedText, position, style string) (string, error) {
+	if a.configService == nil {
+		return "", fmt.Errorf("service not initialized")
+	}
+
 	config, err := a.configService.GetConfig()
 	if err != nil {
 		return "", fmt.Errorf("get config failed: %w", err)
+	}
+
+	if config.APIKey == "" {
+		return "", fmt.Errorf("api key is empty, please configure in settings")
 	}
 
 	writingAgent, err := agent.NewWritingAgent(config.APIKey, config.APIBaseURL, config.Model)
@@ -179,9 +301,17 @@ func (a *App) StreamWriting(action, context, selectedText, position, style strin
 // 前端通过 EventsOn("ai-stream") 监听流式输出
 // 通过 EventsOn("ai-stream-done") 监听完成事件
 func (a *App) StreamWritingEvent(action, context, selectedText, position, style string) error {
+	if a.configService == nil {
+		return fmt.Errorf("service not initialized")
+	}
+
 	config, err := a.configService.GetConfig()
 	if err != nil {
 		return fmt.Errorf("get config failed: %w", err)
+	}
+
+	if config.APIKey == "" {
+		return fmt.Errorf("api key is empty, please configure in settings")
 	}
 
 	writingAgent, err := agent.NewWritingAgent(config.APIKey, config.APIBaseURL, config.Model)
@@ -191,7 +321,7 @@ func (a *App) StreamWritingEvent(action, context, selectedText, position, style 
 
 	// 生成唯一请求ID
 	requestID := fmt.Sprintf("stream-%d", time.Now().UnixNano())
-	
+
 	// 启动协程进行流式输出
 	go func() {
 		err := writingAgent.StreamExecute(a.ctx, agent.WritingRequest{

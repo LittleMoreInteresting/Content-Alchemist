@@ -72,8 +72,9 @@ const actions = [
 ]
 
 function onAction(actionId: string) {
+  // 延迟关闭，确保事件被正确处理
   emit('action', actionId)
-  emit('close')
+  setTimeout(() => emit('close'), 100)
 }
 
 function onCustomAction() {
