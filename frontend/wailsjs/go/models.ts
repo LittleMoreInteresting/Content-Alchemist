@@ -1,37 +1,41 @@
-export namespace models {
+export namespace model {
 	
-	export class AIConfig {
-	    baseUrl: string;
-	    token: string;
-	    temperature: number;
-	    model: string;
+	export class OutlineNode {
+	    id: string;
+	    level: number;
+	    title: string;
+	    content: string;
+	    parentId: string;
+	    status: string;
+	    wordCount: number;
+	    targetWords: number;
 	
 	    static createFrom(source: any = {}) {
-	        return new AIConfig(source);
+	        return new OutlineNode(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.baseUrl = source["baseUrl"];
-	        this.token = source["token"];
-	        this.temperature = source["temperature"];
-	        this.model = source["model"];
+	        this.id = source["id"];
+	        this.level = source["level"];
+	        this.title = source["title"];
+	        this.content = source["content"];
+	        this.parentId = source["parentId"];
+	        this.status = source["status"];
+	        this.wordCount = source["wordCount"];
+	        this.targetWords = source["targetWords"];
 	    }
 	}
 	export class Article {
-	    id: number;
-	    uuid: string;
-	    filePath: string;
+	    id: string;
 	    title: string;
-	    summary: string;
-	    tags: string[];
-	    wordCount: number;
+	    content: string;
+	    outline: OutlineNode[];
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
 	    updatedAt: any;
-	    // Go type: time
-	    lastOpenedAt: any;
+	    status: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Article(source);
@@ -40,15 +44,12 @@ export namespace models {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
-	        this.uuid = source["uuid"];
-	        this.filePath = source["filePath"];
 	        this.title = source["title"];
-	        this.summary = source["summary"];
-	        this.tags = source["tags"];
-	        this.wordCount = source["wordCount"];
+	        this.content = source["content"];
+	        this.outline = this.convertValues(source["outline"], OutlineNode);
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
-	        this.lastOpenedAt = this.convertValues(source["lastOpenedAt"], null);
+	        this.status = source["status"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -69,32 +70,81 @@ export namespace models {
 		    return a;
 		}
 	}
-	export class GenerateOutlineResult {
-	    titles: string[];
-	    outline: string;
+	export class Config {
+	    id: string;
+	    apiBaseUrl: string;
+	    apiKey: string;
+	    model: string;
+	    temperature: number;
+	    styleTags: string[];
+	    audience: string;
+	    persona: string;
+	    // Go type: time
+	    createdAt: any;
+	    // Go type: time
+	    updatedAt: any;
 	
 	    static createFrom(source: any = {}) {
-	        return new GenerateOutlineResult(source);
+	        return new Config(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.titles = source["titles"];
-	        this.outline = source["outline"];
+	        this.id = source["id"];
+	        this.apiBaseUrl = source["apiBaseUrl"];
+	        this.apiKey = source["apiKey"];
+	        this.model = source["model"];
+	        this.temperature = source["temperature"];
+	        this.styleTags = source["styleTags"];
+	        this.audience = source["audience"];
+	        this.persona = source["persona"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
-	export class ReadArticleResponse {
-	    article?: Article;
+	export class Material {
+	    id: string;
+	    type: string;
+	    title: string;
 	    content: string;
+	    tags: string[];
+	    source: string;
+	    // Go type: time
+	    createdAt: any;
+	    usageCount: number;
 	
 	    static createFrom(source: any = {}) {
-	        return new ReadArticleResponse(source);
+	        return new Material(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.article = this.convertValues(source["article"], Article);
+	        this.id = source["id"];
+	        this.type = source["type"];
+	        this.title = source["title"];
 	        this.content = source["content"];
+	        this.tags = source["tags"];
+	        this.source = source["source"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.usageCount = source["usageCount"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

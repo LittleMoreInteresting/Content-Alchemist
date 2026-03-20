@@ -1,18 +1,25 @@
-import { createApp } from 'vue';
-import App from './components/App.vue';
+import { createApp } from 'vue'
+import ElementPlus from 'element-plus'
+import * as ElementPlusIconsVue from '@element-plus/icons-vue'
+import 'element-plus/dist/index.css'
+// @ts-ignore
+import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
 
-// 导入全局样式
-import './styles/global.css';
+import App from './App.vue'
+import router from './router'
+import pinia from './stores'
+import { installShortcuts } from '@/utils/shortcuts'
 
-// 创建 Vue 应用
-const app = createApp(App);
+const app = createApp(App)
 
-// 全局错误处理
-app.config.errorHandler = (err, instance, info) => {
-  console.error('Vue Error:', err);
-  console.error('Component:', instance);
-  console.error('Info:', info);
-};
+// 注册所有图标
+for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+  app.component(key, component)
+}
 
-// 挂载应用
-app.mount('#app');
+app.use(pinia)
+app.use(router)
+app.use(ElementPlus, { locale: zhCn })
+app.use(installShortcuts)
+
+app.mount('#app')

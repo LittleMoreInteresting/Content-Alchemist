@@ -1,42 +1,90 @@
-/**
- * 类型定义统一导出
- */
-
-export * from './article';
-export * from './wails';
-
-import type { Article, Result } from './article';
-
-/** 可空类型 */
-export type Nullable<T> = T | null;
-
-/** 可选类型 */
-export type Optional<T> = T | undefined;
-
-/** 异步函数返回类型 */
-export type AsyncResult<T> = Promise<Result<T>>;
-
-/** 通用错误类型 */
-export interface AppError {
-  code: string;
-  message: string;
-  details?: unknown;
-}
-
-/** 编辑器状态 */
-export interface EditorState {
-  article: Article | null;
-  content: string;
-  isDirty: boolean;
-  isSaving: boolean;
-  saveError: string | null;
-  lastSavedAt: Date | null;
-}
-
-/** 通知类型 */
-export interface Notification {
+// 文章类型
+export interface Article {
   id: string;
-  type: 'success' | 'error' | 'warning' | 'info';
-  message: string;
-  duration?: number;
+  title: string;
+  content: string;
+  outline: OutlineNode[];
+  createdAt: string;
+  updatedAt: string;
+  status: 'draft' | 'published';
+}
+
+// 大纲节点
+export interface OutlineNode {
+  id: string;
+  level: 1 | 2 | 3;
+  title: string;
+  content?: string;
+  parentId?: string;
+  status: 'empty' | 'draft' | 'done';
+  wordCount: number;
+  targetWords: number;
+}
+
+// 配置类型
+export interface Config {
+  id: string;
+  apiBaseUrl: string;
+  apiKey: string;
+  model: string;
+  temperature: number;
+  styleTags: string[];
+  audience: string;
+  persona: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 素材类型
+export interface Material {
+  id: string;
+  type: 'snippet' | 'data' | 'quote' | 'history';
+  title: string;
+  content: string;
+  tags: string[];
+  source: string;
+  createdAt: string;
+  usageCount: number;
+}
+
+// 版本类型
+export interface Version {
+  id: string;
+  articleId: string;
+  content: string;
+  snapshot: string;
+  createdAt: string;
+  type: 'auto' | 'manual';
+}
+
+// AI 写作请求
+export interface WritingRequest {
+  action: 'expand' | 'polish' | 'shorten' | 'continue' | 'title';
+  context: string;
+  selectedText: string;
+  position: 'before' | 'after' | 'replace';
+  style: string;
+}
+
+// AI 写作响应
+export interface WritingResponse {
+  content: string;
+  suggestions?: string[];
+}
+
+// 大纲生成请求
+export interface OutlineRequest {
+  title: string;
+  style: string;
+  audience: string;
+}
+
+// 命令面板命令
+export interface Command {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  shortcut?: string;
+  action: () => void;
 }

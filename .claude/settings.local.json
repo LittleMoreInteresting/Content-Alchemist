@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build)",
+      "Bash(go mod tidy)",
+      "Bash(wails build)",
+      "Bash(wails generate module)"
+    ]
+  }
+}
