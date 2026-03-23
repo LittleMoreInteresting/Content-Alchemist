@@ -65,6 +65,11 @@ func (s *ArticleService) DeleteArticle(id string) error {
 	return s.db.DeleteArticle(id)
 }
 
+// GetDB 获取数据库连接
+func (s *ArticleService) GetDB() *repository.DB {
+	return s.db
+}
+
 // generateID 生成唯一ID
 func generateID() string {
 	bytes := make([]byte, 8)

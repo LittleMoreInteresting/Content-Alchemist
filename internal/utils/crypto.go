@@ -13,7 +13,7 @@ import (
 
 const (
 	keyringService = "Content-Alchemist"
-	keyringUser    = "encryption-key"
+	keyringUser    = "encryption-key-v1"
 )
 
 // Crypto 加密工具
@@ -51,7 +51,7 @@ func GenerateAndStoreKey() error {
 
 	// Base64 编码后存储
 	keyStr := base64.StdEncoding.EncodeToString(key)
-	
+
 	// 存储到系统钥匙串
 	if err := keyring.Set(keyringService, keyringUser, keyStr); err != nil {
 		return fmt.Errorf("store key to keyring failed: %w", err)

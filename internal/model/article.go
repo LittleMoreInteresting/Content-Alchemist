@@ -10,7 +10,21 @@ type Article struct {
 	Outline   []OutlineNode `json:"outline"`
 	CreatedAt time.Time     `json:"createdAt"`
 	UpdatedAt time.Time     `json:"updatedAt"`
-	Status    string        `json:"status"` // draft, published
+	Status    string        `json:"status"` // draft, reviewing, ready, published, archived
+
+	// 新增字段 - 工作流支持
+	SourceType    string     `json:"sourceType"`    // manual, workflow
+	WorkflowRunID string     `json:"workflowRunId"` // 来源工作流
+	TopicID       string     `json:"topicId"`       // 关联选题
+
+	// 质量评估
+	QualityScore float64 `json:"qualityScore"`
+	ReadTime     int     `json:"readTime"`  // 阅读时长(分钟)
+	WordCount    int     `json:"wordCount"`
+
+	// 发布信息
+	PublishTaskID string     `json:"publishTaskId"`
+	PublishedAt   *time.Time `json:"publishedAt"`
 }
 
 // OutlineNode 大纲节点
@@ -50,6 +64,21 @@ type Material struct {
 	CreatedAt  time.Time `json:"createdAt"`
 	UsageCount int       `json:"usageCount"`
 }
+
+// ArticleStatus 文章状态常量
+const (
+	ArticleStatusDraft     = "draft"
+	ArticleStatusReviewing = "reviewing"
+	ArticleStatusReady     = "ready"
+	ArticleStatusPublished = "published"
+	ArticleStatusArchived  = "archived"
+)
+
+// ArticleSource 文章来源类型
+const (
+	ArticleSourceManual   = "manual"
+	ArticleSourceWorkflow = "workflow"
+)
 
 // Version 文章版本
 type Version struct {

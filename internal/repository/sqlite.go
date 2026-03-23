@@ -100,6 +100,7 @@ func (d *DB) Close() error {
 // initTables 初始化数据库表
 func (d *DB) initTables() error {
 	queries := []string{
+		// 原有表
 		`CREATE TABLE IF NOT EXISTS config (
 			id TEXT PRIMARY KEY,
 			api_base_url TEXT DEFAULT 'https://api.deepseek.com',
@@ -118,6 +119,14 @@ func (d *DB) initTables() error {
 			content TEXT,
 			outline TEXT,
 			status TEXT DEFAULT 'draft',
+			source_type TEXT DEFAULT 'manual',
+			workflow_run_id TEXT,
+			topic_id TEXT,
+			quality_score REAL DEFAULT 0,
+			read_time INTEGER DEFAULT 0,
+			word_count INTEGER DEFAULT 0,
+			publish_task_id TEXT,
+			published_at DATETIME,
 			created_at DATETIME,
 			updated_at DATETIME
 		)`,
@@ -139,6 +148,111 @@ func (d *DB) initTables() error {
 			created_at DATETIME,
 			version_type TEXT
 		)`,
+		// 工作流相关表
+		`CREATE TABLE IF NOT EXISTS workflows (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			description TEXT,
+			trigger_config TEXT,
+			steps TEXT,
+			auto_publish BOOLEAN DEFAULT 0,
+			need_review BOOLEAN DEFAULT 1,
+			status TEXT DEFAULT 'active',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS workflow_runs (
+			id TEXT PRIMARY KEY,
+			workflow_id TEXT NOT NULL,
+			status TEXT DEFAULT 'pending',
+			current_step TEXT,
+			input TEXT,
+			output TEXT,
+			steps TEXT,
+			started_at DATETIME,
+			completed_at DATETIME,
+			error TEXT,
+			FOREIGN KEY (workflow_id) REFERENCES workflows(id)
+		)`,
+		// 选题相关表
+		`CREATE TABLE IF NOT EXISTS topics (
+			id TEXT PRIMARY KEY,
+			title TEXT NOT NULL,
+			category TEXT,
+			source TEXT,
+			source_url TEXT,
+			score REAL DEFAULT 0,
+			hot_score REAL DEFAULT 0,
+			comp_score REAL DEFAULT 0,
+			fit_score REAL DEFAULT 0,
+			keywords TEXT,
+			summary TEXT,
+			reference_urls TEXT,
+			angles TEXT,
+			status TEXT DEFAULT 'pending',
+			workflow_run_id TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS hot_trends (
+			id TEXT PRIMARY KEY,
+			platform TEXT NOT NULL,
+			title TEXT NOT NULL,
+			url TEXT,
+			hot_rank INTEGER,
+			hot_value REAL,
+			category TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		// 发布相关表
+		`CREATE TABLE IF NOT EXISTS publish_accounts (
+			id TEXT PRIMARY KEY,
+			platform TEXT NOT NULL,
+			name TEXT NOT NULL,
+			account_id TEXT,
+			account_type TEXT,
+			app_id TEXT,
+			app_secret TEXT,
+			access_token TEXT,
+			token_expiry DATETIME,
+			refresh_token TEXT,
+			config TEXT,
+			status TEXT DEFAULT 'active',
+			last_used_at DATETIME,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		)`,
+		`CREATE TABLE IF NOT EXISTS publish_tasks (
+			id TEXT PRIMARY KEY,
+			article_id TEXT NOT NULL,
+			account_id TEXT NOT NULL,
+			title TEXT,
+			content TEXT,
+			cover_image TEXT,
+			summary TEXT,
+			author TEXT,
+			tags TEXT,
+			category TEXT,
+			original_url TEXT,
+			schedule_type TEXT DEFAULT 'immediate',
+			schedule_at DATETIME,
+			status TEXT DEFAULT 'pending',
+			platform_id TEXT,
+			platform_url TEXT,
+			error TEXT,
+			published_at DATETIME,
+			retry_count INTEGER DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (account_id) REFERENCES publish_accounts(id)
+		)`,
+		// 创建索引
+		`CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow_id ON workflow_runs(workflow_id)`,
+		`CREATE INDEX IF NOT EXISTS idx_workflow_runs_status ON workflow_runs(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_topics_status ON topics(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_topics_source ON topics(source)`,
+		`CREATE INDEX IF NOT EXISTS idx_hot_trends_platform ON hot_trends(platform)`,
+		`CREATE INDEX IF NOT EXISTS idx_publish_tasks_status ON publish_tasks(status)`,
+		`CREATE INDEX IF NOT EXISTS idx_publish_tasks_schedule ON publish_tasks(schedule_at)`,
 	}
 
 	for _, query := range queries {
@@ -243,8 +357,9 @@ func (d *DB) SaveArticle(article *model.Article) error {
 	article.UpdatedAt = time.Now()
 
 	query := `INSERT OR REPLACE INTO articles 
-		(id, title, content, outline, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`
+		(id, title, content, outline, status, source_type, workflow_run_id, topic_id,
+		 quality_score, read_time, word_count, publish_task_id, published_at, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	outlineJSON, _ := json.Marshal(article.Outline)
 
@@ -254,6 +369,14 @@ func (d *DB) SaveArticle(article *model.Article) error {
 		article.Content,
 		string(outlineJSON),
 		article.Status,
+		article.SourceType,
+		article.WorkflowRunID,
+		article.TopicID,
+		article.QualityScore,
+		article.ReadTime,
+		article.WordCount,
+		article.PublishTaskID,
+		article.PublishedAt,
 		article.CreatedAt,
 		article.UpdatedAt,
 	)
@@ -262,7 +385,8 @@ func (d *DB) SaveArticle(article *model.Article) error {
 
 // GetArticle 获取文章
 func (d *DB) GetArticle(id string) (*model.Article, error) {
-	query := `SELECT id, title, content, outline, status, created_at, updated_at 
+	query := `SELECT id, title, content, outline, status, source_type, workflow_run_id, topic_id,
+		quality_score, read_time, word_count, publish_task_id, published_at, created_at, updated_at 
 		FROM articles WHERE id = ?`
 
 	row := d.conn.QueryRow(query, id)
@@ -276,6 +400,14 @@ func (d *DB) GetArticle(id string) (*model.Article, error) {
 		&article.Content,
 		&outlineStr,
 		&article.Status,
+		&article.SourceType,
+		&article.WorkflowRunID,
+		&article.TopicID,
+		&article.QualityScore,
+		&article.ReadTime,
+		&article.WordCount,
+		&article.PublishTaskID,
+		&article.PublishedAt,
 		&article.CreatedAt,
 		&article.UpdatedAt,
 	)
@@ -292,7 +424,8 @@ func (d *DB) GetArticle(id string) (*model.Article, error) {
 
 // ListArticles 列出所有文章
 func (d *DB) ListArticles() ([]model.Article, error) {
-	query := `SELECT id, title, content, outline, status, created_at, updated_at 
+	query := `SELECT id, title, content, outline, status, source_type, workflow_run_id, topic_id,
+		quality_score, read_time, word_count, publish_task_id, published_at, created_at, updated_at 
 		FROM articles ORDER BY updated_at DESC`
 
 	rows, err := d.conn.Query(query)
@@ -312,6 +445,14 @@ func (d *DB) ListArticles() ([]model.Article, error) {
 			&article.Content,
 			&outlineStr,
 			&article.Status,
+			&article.SourceType,
+			&article.WorkflowRunID,
+			&article.TopicID,
+			&article.QualityScore,
+			&article.ReadTime,
+			&article.WordCount,
+			&article.PublishTaskID,
+			&article.PublishedAt,
 			&article.CreatedAt,
 			&article.UpdatedAt,
 		)

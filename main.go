@@ -18,6 +18,7 @@ import (
 
 //go:embed all:frontend/dist
 var assets embed.FS
+var version = "1.0.0"
 
 // App 应用程序结构
 type App struct {
@@ -25,6 +26,8 @@ type App struct {
 	configService   *service.ConfigService
 	articleService  *service.ArticleService
 	materialService *service.MaterialService
+	workflowService *service.WorkflowService
+	topicService    *service.TopicService
 }
 
 // NewApp 创建新应用
@@ -57,6 +60,28 @@ func (a *App) startup(ctx context.Context) {
 		fmt.Printf("Init material service failed: %v\n", err)
 	} else {
 		a.materialService = materialService
+	}
+
+	// 初始化新服务（如果数据库已初始化）
+	if articleService != nil {
+		// 获取数据库连接
+		db := articleService.GetDB()
+
+		// 初始化工作流服务
+		a.workflowService = service.NewWorkflowService(db)
+
+		// 初始化选题服务（需要配置）
+		if configService != nil {
+			config, _ := configService.GetConfig()
+			if config != nil && config.APIKey != "" {
+				topicAgent, err := agent.NewTopicAgent(config.APIKey, config.APIBaseURL, config.Model)
+				if err != nil {
+					fmt.Printf("Init topic agent failed: %v\n", err)
+				} else {
+					a.topicService = service.NewTopicService(db, topicAgent)
+				}
+			}
+		}
 	}
 }
 
@@ -377,4 +402,197 @@ func main() {
 	if err != nil {
 		println("Error:", err.Error())
 	}
+}
+
+// ============ Workflow API ============
+
+// CreateWorkflow 创建工作流
+func (a *App) CreateWorkflow(workflow model.Workflow) (*model.Workflow, error) {
+	if a.workflowService == nil {
+		return nil, fmt.Errorf("workflow service not initialized")
+	}
+	if err := a.workflowService.CreateWorkflow(&workflow); err != nil {
+		return nil, err
+	}
+	return &workflow, nil
+}
+
+// GetWorkflow 获取工作流
+func (a *App) GetWorkflow(id string) (*model.Workflow, error) {
+	if a.workflowService == nil {
+		return nil, fmt.Errorf("workflow service not initialized")
+	}
+	return a.workflowService.GetWorkflow(id)
+}
+
+// ListWorkflows 列出所有工作流
+func (a *App) ListWorkflows() ([]model.Workflow, error) {
+	if a.workflowService == nil {
+		return nil, fmt.Errorf("workflow service not initialized")
+	}
+	return a.workflowService.ListWorkflows()
+}
+
+// UpdateWorkflow 更新工作流
+func (a *App) UpdateWorkflow(workflow model.Workflow) error {
+	if a.workflowService == nil {
+		return fmt.Errorf("workflow service not initialized")
+	}
+	return a.workflowService.UpdateWorkflow(&workflow)
+}
+
+// DeleteWorkflow 删除工作流
+func (a *App) DeleteWorkflow(id string) error {
+	if a.workflowService == nil {
+		return fmt.Errorf("workflow service not initialized")
+	}
+	return a.workflowService.DeleteWorkflow(id)
+}
+
+// StartWorkflow 启动工作流
+func (a *App) StartWorkflow(workflowID string, input map[string]interface{}) (*model.WorkflowRun, error) {
+	if a.workflowService == nil {
+		return nil, fmt.Errorf("workflow service not initialized")
+	}
+	return a.workflowService.StartWorkflow(a.ctx, workflowID, input)
+}
+
+// GetWorkflowRun 获取工作流运行状态
+func (a *App) GetWorkflowRun(runID string) (*model.WorkflowRun, error) {
+	if a.workflowService == nil {
+		return nil, fmt.Errorf("workflow service not initialized")
+	}
+	return a.workflowService.GetWorkflowRun(runID)
+}
+
+// ListWorkflowRuns 列出工作流运行实例
+func (a *App) ListWorkflowRuns(workflowID string) ([]model.WorkflowRun, error) {
+	if a.workflowService == nil {
+		return nil, fmt.Errorf("workflow service not initialized")
+	}
+	return a.workflowService.ListWorkflowRuns(workflowID)
+}
+
+// CancelWorkflow 取消工作流运行
+func (a *App) CancelWorkflow(runID string) error {
+	if a.workflowService == nil {
+		return fmt.Errorf("workflow service not initialized")
+	}
+	return a.workflowService.CancelWorkflow(runID)
+}
+
+// GetAgentRegistry 获取Agent注册表
+func (a *App) GetAgentRegistry() []map[string]interface{} {
+	if a.workflowService == nil {
+		return nil
+	}
+	registry := a.workflowService.GetEngine().GetRegistry()
+	agents := registry.List()
+
+	var result []map[string]interface{}
+	for _, agent := range agents {
+		result = append(result, map[string]interface{}{
+			"type":        agent.Type,
+			"name":        agent.Name,
+			"description": agent.Description,
+			"icon":        agent.Icon,
+			"category":    agent.Category,
+		})
+	}
+	return result
+}
+
+// ============ Topic API ============
+
+// CreateTopic 创建选题
+func (a *App) CreateTopic(topic model.Topic) (*model.Topic, error) {
+	if a.topicService == nil {
+		return nil, fmt.Errorf("topic service not initialized")
+	}
+	if err := a.topicService.CreateTopic(&topic); err != nil {
+		return nil, err
+	}
+	return &topic, nil
+}
+
+// GetTopic 获取选题
+func (a *App) GetTopic(id string) (*model.Topic, error) {
+	if a.topicService == nil {
+		return nil, fmt.Errorf("topic service not initialized")
+	}
+	return a.topicService.GetTopic(id)
+}
+
+// ListTopics 列出选题
+func (a *App) ListTopics(status string, limit int) ([]model.Topic, error) {
+	if a.topicService == nil {
+		return nil, fmt.Errorf("topic service not initialized")
+	}
+	return a.topicService.ListTopics(status, limit)
+}
+
+// UpdateTopic 更新选题
+func (a *App) UpdateTopic(topic model.Topic) error {
+	if a.topicService == nil {
+		return fmt.Errorf("topic service not initialized")
+	}
+	return a.topicService.UpdateTopic(&topic)
+}
+
+// DeleteTopic 删除选题
+func (a *App) DeleteTopic(id string) error {
+	if a.topicService == nil {
+		return fmt.Errorf("topic service not initialized")
+	}
+	return a.topicService.DeleteTopic(id)
+}
+
+// ApproveTopic 批准选题
+func (a *App) ApproveTopic(id string) error {
+	if a.topicService == nil {
+		return fmt.Errorf("topic service not initialized")
+	}
+	return a.topicService.ApproveTopic(id)
+}
+
+// RejectTopic 拒绝选题
+func (a *App) RejectTopic(id string) error {
+	if a.topicService == nil {
+		return fmt.Errorf("topic service not initialized")
+	}
+	return a.topicService.RejectTopic(id)
+}
+
+// GetHotTrends 获取热点趋势
+func (a *App) GetHotTrends(platform string, limit int) ([]model.HotTrend, error) {
+	if a.topicService == nil {
+		return nil, fmt.Errorf("topic service not initialized")
+	}
+	return a.topicService.GetHotTrends(platform, limit)
+}
+
+// FetchAndSaveHotTrends 获取并保存热点趋势
+func (a *App) FetchAndSaveHotTrends(platforms []string, limit int) ([]model.HotTrend, error) {
+	if a.topicService == nil {
+		return nil, fmt.Errorf("topic service not initialized")
+	}
+
+	trends, err := a.topicService.FetchHotTrends(a.ctx, platforms, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := a.topicService.SaveHotTrends(trends); err != nil {
+		return nil, err
+	}
+
+	return trends, nil
+}
+
+// GetHotTrendPlatforms 获取热点平台列表
+func (a *App) GetHotTrendPlatforms() ([]string, error) {
+	if a.topicService == nil {
+		return nil, fmt.Errorf("topic service not initialized")
+	}
+	return a.topicService.GetHotTrendPlatforms()
 }
