@@ -25,6 +25,7 @@ type Topic struct {
 	Summary    string   `json:"summary"`    // 内容摘要
 	References []string `json:"references"` // 参考文章
 	Angles     []string `json:"angles"`     // 切入角度
+	Reason     string   `json:"reason"`     // 推荐理由
 
 	// 状态
 	Status        string `json:"status"`        // pending, approved, rejected, processing, published, archived

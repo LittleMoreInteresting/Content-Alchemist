@@ -242,6 +242,7 @@ export namespace model {
 	    summary: string;
 	    references: string[];
 	    angles: string[];
+	    reason: string;
 	    status: string;
 	    workflowRunId: string;
 	    // Go type: time
@@ -268,6 +269,7 @@ export namespace model {
 	        this.summary = source["summary"];
 	        this.references = source["references"];
 	        this.angles = source["angles"];
+	        this.reason = source["reason"];
 	        this.status = source["status"];
 	        this.workflowRunId = source["workflowRunId"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);

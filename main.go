@@ -596,3 +596,89 @@ func (a *App) GetHotTrendPlatforms() ([]string, error) {
 	}
 	return a.topicService.GetHotTrendPlatforms()
 }
+
+// SearchTopics 搜索选题
+func (a *App) SearchTopics(keyword string) ([]model.Topic, error) {
+	if a.topicService == nil {
+		return nil, fmt.Errorf("topic service not initialized")
+	}
+	return a.topicService.SearchTopics(keyword)
+}
+
+// GetHotPlatforms 获取热点平台列表
+func (a *App) GetHotPlatforms() []string {
+	if a.topicService == nil {
+		return nil
+	}
+	return a.topicService.GetHotPlatforms()
+}
+
+// FetchHotTrendsRealtime 实时获取热点（不保存）
+func (a *App) FetchHotTrendsRealtime(platforms []string, limit int) ([]model.HotTrend, error) {
+	if a.topicService == nil {
+		return nil, fmt.Errorf("topic service not initialized")
+	}
+	return a.topicService.FetchHotTrends(a.ctx, platforms, limit)
+}
+
+// AIGenerateTopicsFromHot AI基于热点生成选题
+func (a *App) AIGenerateTopicsFromHot(platforms []string, limit int) ([]*model.Topic, error) {
+	if a.topicService == nil {
+		return nil, fmt.Errorf("topic service not initialized")
+	}
+	return a.topicService.AIGenerateTopicsFromHot(a.ctx, platforms, limit)
+}
+
+// CreateArticleFromTopic 基于选题创建文章并启动工作流
+func (a *App) CreateArticleFromTopic(topicID string, workflowID string) (*model.Article, *model.WorkflowRun, error) {
+	if a.topicService == nil || a.workflowService == nil || a.articleService == nil {
+		return nil, nil, fmt.Errorf("service not initialized")
+	}
+	
+	// 1. 获取选题
+	topic, err := a.topicService.GetTopic(topicID)
+	if err != nil {
+		return nil, nil, err
+	}
+	
+	// 2. 创建文章
+	article, err := a.articleService.CreateArticle(topic.Title)
+	if err != nil {
+		return nil, nil, err
+	}
+	
+	// 3. 关联选题
+	article.TopicID = topicID
+	article.SourceType = model.ArticleSourceWorkflow
+	if err := a.articleService.SaveArticle(article); err != nil {
+		return nil, nil, err
+	}
+	
+	// 4. 更新选题状态
+	topic.Status = model.TopicStatusProcessing
+	if err := a.topicService.UpdateTopic(topic); err != nil {
+		// 非致命错误
+	}
+	
+	// 5. 启动工作流
+	input := map[string]interface{}{
+		"topic_id":    topicID,
+		"article_id":  article.ID,
+		"title":       topic.Title,
+		"keywords":    topic.Keywords,
+		"angles":      topic.Angles,
+	}
+	
+	run, err := a.workflowService.StartWorkflow(a.ctx, workflowID, input)
+	if err != nil {
+		return article, nil, err
+	}
+	
+	// 6. 更新文章关联工作流
+	article.WorkflowRunID = run.ID
+	if err := a.articleService.SaveArticle(article); err != nil {
+		// 非致命错误
+	}
+	
+	return article, run, nil
+}

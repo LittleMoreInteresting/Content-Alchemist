@@ -25,7 +25,7 @@ func (d *DB) SaveTopic(topic *model.Topic) error {
 
 	query := `INSERT OR REPLACE INTO topics 
 		(id, title, category, source, source_url, score, hot_score, comp_score, fit_score, 
-		 keywords, summary, reference_urls, angles, status, workflow_run_id, created_at, updated_at)
+		 keywords, summary, reference_urls, angles, reason, status, workflow_run_id, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err := d.conn.Exec(query,
@@ -42,6 +42,7 @@ func (d *DB) SaveTopic(topic *model.Topic) error {
 		topic.Summary,
 		string(referencesJSON),
 		string(anglesJSON),
+		topic.Reason,
 		topic.Status,
 		topic.WorkflowRunID,
 		topic.CreatedAt,
@@ -53,7 +54,7 @@ func (d *DB) SaveTopic(topic *model.Topic) error {
 // GetTopic 获取选题
 func (d *DB) GetTopic(id string) (*model.Topic, error) {
 	query := `SELECT id, title, category, source, source_url, score, hot_score, comp_score, fit_score, 
-		keywords, summary, reference_urls, angles, status, workflow_run_id, created_at, updated_at 
+		keywords, summary, reference_urls, angles, reason, status, workflow_run_id, created_at, updated_at 
 		FROM topics WHERE id = ?`
 
 	row := d.conn.QueryRow(query, id)
@@ -75,6 +76,7 @@ func (d *DB) GetTopic(id string) (*model.Topic, error) {
 		&topic.Summary,
 		&referencesStr,
 		&anglesStr,
+		&topic.Reason,
 		&topic.Status,
 		&topic.WorkflowRunID,
 		&topic.CreatedAt,
@@ -107,11 +109,11 @@ func (d *DB) ListTopics(status string, limit int) ([]model.Topic, error) {
 
 	if status == "" {
 		query = `SELECT id, title, category, source, source_url, score, hot_score, comp_score, fit_score, 
-			keywords, summary, reference_urls, angles, status, workflow_run_id, created_at, updated_at 
+			keywords, summary, reference_urls, angles, reason, status, workflow_run_id, created_at, updated_at 
 			FROM topics ORDER BY score DESC, created_at DESC`
 	} else {
 		query = `SELECT id, title, category, source, source_url, score, hot_score, comp_score, fit_score, 
-			keywords, summary, reference_urls, angles, status, workflow_run_id, created_at, updated_at 
+			keywords, summary, reference_urls, angles, reason, status, workflow_run_id, created_at, updated_at 
 			FROM topics WHERE status = ? ORDER BY score DESC, created_at DESC`
 		args = append(args, status)
 	}
@@ -173,7 +175,7 @@ func (d *DB) ListTopics(status string, limit int) ([]model.Topic, error) {
 // ListTopicsBySource 根据来源列出选题
 func (d *DB) ListTopicsBySource(source string, limit int) ([]model.Topic, error) {
 	query := `SELECT id, title, category, source, source_url, score, hot_score, comp_score, fit_score, 
-		keywords, summary, reference_urls, angles, status, workflow_run_id, created_at, updated_at 
+		keywords, summary, reference_urls, angles, reason, status, workflow_run_id, created_at, updated_at 
 		FROM topics WHERE source = ? ORDER BY score DESC, created_at DESC`
 
 	if limit > 0 {
@@ -239,7 +241,7 @@ func (d *DB) DeleteTopic(id string) error {
 // SearchTopics 搜索选题
 func (d *DB) SearchTopics(keyword string) ([]model.Topic, error) {
 	query := `SELECT id, title, category, source, source_url, score, hot_score, comp_score, fit_score, 
-		keywords, summary, reference_urls, angles, status, workflow_run_id, created_at, updated_at 
+		keywords, summary, reference_urls, angles, reason, status, workflow_run_id, created_at, updated_at 
 		FROM topics WHERE title LIKE ? OR summary LIKE ? OR keywords LIKE ?
 		ORDER BY score DESC, created_at DESC`
 

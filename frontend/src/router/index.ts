@@ -34,6 +34,11 @@ const routes = [
     path: '/publish',
     name: 'Publish',
     component: () => import('@/views/PublishView.vue')
+  },
+  {
+    path: '/topic',
+    name: 'TopicCenter',
+    component: () => import('@/views/topic/TopicCenter.vue')
   }
 ]
 

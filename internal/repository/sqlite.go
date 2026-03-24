@@ -189,6 +189,7 @@ func (d *DB) initTables() error {
 			summary TEXT,
 			reference_urls TEXT,
 			angles TEXT,
+			reason TEXT,
 			status TEXT DEFAULT 'pending',
 			workflow_run_id TEXT,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
